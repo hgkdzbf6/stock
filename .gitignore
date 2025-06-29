@@ -9,3 +9,9 @@ share/
 test_docx.py
 test.docx
 pyvenv.cfg
+
+*.pyc
+*.csv
+*.png
+
+__pycache__/
