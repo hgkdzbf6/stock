@@ -6,10 +6,48 @@ import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
+import platform
+import matplotlib.font_manager as fm
+
+def setup_chinese_font():
+    """根据操作系统设置合适的中文字体"""
+    system = platform.system()
+    
+    if system == "Windows":
+        # Windows系统使用SimHei字体
+        font_name = 'SimHei'
+    elif system == "Darwin":  # macOS
+        # macOS系统使用PingFang SC字体
+        font_name = 'PingFang SC'
+    else:  # Linux或其他系统
+        # 尝试使用常见的中文字体
+        font_name = 'DejaVu Sans'
+    
+    # 检查字体是否可用
+    available_fonts = [f.name for f in fm.fontManager.ttflist]
+    
+    if font_name in available_fonts:
+        plt.rcParams['font.family'] = font_name
+        print(f"使用字体: {font_name}")
+    else:
+        # 如果指定字体不可用，尝试其他中文字体
+        chinese_fonts = ['SimHei', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'WenQuanYi Micro Hei', 'DejaVu Sans']
+        
+        for font in chinese_fonts:
+            if font in available_fonts:
+                plt.rcParams['font.family'] = font
+                print(f"使用备用字体: {font}")
+                break
+        else:
+            # 如果所有中文字体都不可用，使用默认字体
+            plt.rcParams['font.family'] = 'DejaVu Sans'
+            print("警告: 未找到合适的中文字体，使用默认字体")
+    
+    # 设置负号显示
+    plt.rcParams['axes.unicode_minus'] = False
 
 # 设置中文字体
-plt.rcParams['font.family'] = 'SimHei'
-plt.rcParams['axes.unicode_minus'] = False
+setup_chinese_font()
 
 def plot_single_strategy(strategy_name, results, initial_capital, save_dir=None):
     """绘制单个策略的详细图表"""

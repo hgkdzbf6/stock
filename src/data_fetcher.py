@@ -183,9 +183,6 @@ class DataFetcher:
                 
                 day_times = morning_times + afternoon_times
             
-            # 合并时间点
-            day_times = morning_times + afternoon_times
-            
             for timestamp in day_times:
                 # 生成更真实的价格数据
                 price_change = np.random.normal(0, 0.015)  # 1.5%的标准差

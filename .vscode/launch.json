@@ -1,0 +1,131 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "调试主程序 - 多策略回测",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试主程序 - 单策略回测",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/main.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": ["single"],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试简化测试",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/test_simple.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试工作版本测试",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/test_working.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试交互式启动",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/run_backtrader.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试数据源测试",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/data_feed.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试策略测试",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/strategies.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试回测引擎",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/backtrader/backtest_engine.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        },
+        {
+            "name": "调试自定义脚本",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/backtrader",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backtrader:${workspaceFolder}/src"
+            },
+            "args": [],
+            "justMyCode": false,
+            "stopOnEntry": false
+        }
+    ]
+}

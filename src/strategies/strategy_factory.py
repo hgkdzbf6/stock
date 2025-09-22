@@ -15,6 +15,7 @@ from .advanced_strategies import (
     WilliamsRStrategy,
     PairsTradingStrategy
 )
+from .test_strategies import TestStrategy
 
 class StrategyFactory:
     """策略工厂类"""
@@ -30,7 +31,8 @@ class StrategyFactory:
         'BOLL': BOLLStrategy,
         'DualThrust': DualThrustStrategy,
         'Grid': GridStrategy,
-        
+        'Test': TestStrategy,
+
         # 高级策略
         'MeanReversion': MeanReversionStrategy,
         'TrendFollowing': TrendFollowingStrategy,
@@ -85,4 +87,5 @@ class StrategyFactory:
             'Ichimoku': {},
             'WilliamsR': {'period': 14, 'overbought': -20, 'oversold': -80},
             'PairsTrading': {'lookback': 30, 'threshold': 2.0},
+            'Test': {},
         } 
