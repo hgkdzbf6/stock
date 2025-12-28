@@ -363,3 +363,13 @@ def get_strategy(strategy_name):
         raise ValueError(f"不支持的策略: {strategy_name}")
     
     return STRATEGY_MAP[strategy_name]
+
+if __name__ == "__main__":
+    """测试策略模块"""
+    print("=== Backtrader 策略模块测试 ===")
+    print(f"\n可用策略列表:")
+    for i, (name, strategy_class) in enumerate(STRATEGY_MAP.items(), 1):
+        print(f"{i}. {name}: {strategy_class.__name__}")
+    
+    print(f"\n共 {len(STRATEGY_MAP)} 个策略")
+    print("\n策略模块加载成功！")

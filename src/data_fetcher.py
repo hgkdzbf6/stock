@@ -95,8 +95,9 @@ class DataFetcher:
                 return self._generate_mock_minute_data(code, start_date, end_date, freq)
             
             # 统一列名
-            df.columns = ['date', 'open', 'close', 'high', 'low', 'volume', 'amount', 'amplitude', 'pct_chg', 'change', 'turnover_rate']
+            df.columns = ['date', 'code', 'open', 'close', 'high', 'low', 'volume', 'amount', 'amplitude', 'pct_chg', 'change', 'turnover_rate']
             df['date'] = pd.to_datetime(df['date'])
+            
             df.set_index('date', inplace=True)
             
             print(f"akshare获取成功：{len(df)}条记录，时间范围 {df.index[0]} 到 {df.index[-1]}")

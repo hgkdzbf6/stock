@@ -4,4 +4,5 @@ matplotlib>=3.3.0
 tushare>=1.2.0
 akshare>=1.8.0
 talib-binary
-scipy>=1.7.0 
+scipy>=1.7.0
+backtrader>=1.9.78 
