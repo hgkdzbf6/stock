@@ -1,0 +1,30 @@
+.App {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* 自定义Ant Design主题覆盖 */
+.ant-layout {
+  min-height: 100vh;
+}
+
+.ant-layout-sider {
+  background: #001529;
+}
+
+.ant-layout-header {
+  background: #fff;
+  padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.ant-menu-dark {
+  background: #001529;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+  .ant-layout-header {
+    padding: 0 16px;
+  }
+}
