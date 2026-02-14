@@ -1,76 +1,118 @@
-import { useState } from 'react';
-import { Input, Table, Tag, Button, Space, Select } from 'antd';
-import { SearchOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback } from 'react';
+import { Input, Table, Tag, Button, Select, Spin, message, DatePicker } from 'antd';
+import { SearchOutlined, ReloadOutlined, CalendarOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
+import { useNavigate } from 'react-router-dom';
+import { stockService } from '@services/stock';
+import dayjs, { Dayjs } from 'dayjs';
 
 const { Option } = Select;
 
-const Market = () => {
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [selectedStock, setSelectedStock] = useState<string | null>(null);
+interface Stock {
+  code: string;
+  name: string;
+  market?: string;
+  sector?: string;
+  price?: number;
+  change?: number;
+  change_pct?: number;
+  volume?: number;
+  amount?: number;
+}
 
-  const mockStocks = [
-    {
-      key: '1',
-      code: '600771',
-      name: '东阳光',
-      market: '沪A',
-      sector: '医药',
-      price: 10.5,
-      change: 0.2,
-      change_pct: 1.94,
-      volume: 1000000,
-      amount: 10500000,
-    },
-    {
-      key: '2',
-      code: '000001',
-      name: '平安银行',
-      market: '深A',
-      sector: '银行',
-      price: 12.3,
-      change: -0.15,
-      change_pct: -1.2,
-      volume: 2000000,
-      amount: 24600000,
-    },
-    {
-      key: '3',
-      code: '600519',
-      name: '贵州茅台',
-      market: '沪A',
-      sector: '白酒',
-      price: 1850.0,
-      change: 25.5,
-      change_pct: 1.4,
-      volume: 50000,
-      amount: 92500000,
-    },
-    {
-      key: '4',
-      code: '000002',
-      name: '万科A',
-      market: '深A',
-      sector: '房地产',
-      price: 8.5,
-      change: -0.1,
-      change_pct: -1.16,
-      volume: 1500000,
-      amount: 12750000,
-    },
-    {
-      key: '5',
-      code: '600000',
-      name: '浦发银行',
-      market: '沪A',
-      sector: '银行',
-      price: 7.2,
-      change: 0.05,
-      change_pct: 0.7,
-      volume: 3000000,
-      amount: 21600000,
-    },
-  ];
+const Market = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [stocks, setStocks] = useState<Stock[]>([]);
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0,
+  });
+  const [filters, setFilters] = useState({
+    keyword: '',
+    sector: '',
+  });
+  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(dayjs());
+  const [dataSource, setDataSource] = useState('auto'); // 默认auto模式
+
+  // 获取股票列表
+  const fetchStocks = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await stockService.getStockList({
+        page: pagination.current,
+        page_size: pagination.pageSize,
+        keyword: filters.keyword,
+        sector: filters.sector || undefined,
+        data_source: dataSource,
+      });
+
+      if (response.code === 200 && response.data) {
+        setStocks(response.data.items || []);
+        setPagination({
+          ...pagination,
+          total: response.data.total || 0,
+        });
+      }
+    } catch (error) {
+      console.error('获取股票列表失败:', error);
+      message.error('获取股票列表失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.current, pagination.pageSize, filters.keyword, filters.sector, dataSource]);
+
+  // 初始加载
+  useEffect(() => {
+    fetchStocks();
+  }, [fetchStocks]);
+
+  // 搜索处理
+  const handleSearch = (keyword: string) => {
+    setFilters({ ...filters, keyword });
+    setPagination({ ...pagination, current: 1 });
+  };
+
+  // 板块过滤
+  const handleSectorChange = (sector: string | null) => {
+    setFilters({ ...filters, sector: sector || '' });
+    setPagination({ ...pagination, current: 1 });
+  };
+
+  // 数据源变化
+  const handleDataSourceChange = (source: string) => {
+    setDataSource(source);
+    setPagination({ ...pagination, current: 1 });
+  };
+
+  // 日期变化
+  const handleDateChange = (date: Dayjs | null) => {
+    setSelectedDate(date);
+    if (date) {
+      // 重新获取数据
+      setPagination({ ...pagination, current: 1 });
+    }
+  };
+
+  // 详情跳转
+  const handleDetail = (code: string) => {
+    navigate(`/stock/${code}`);
+  };
+
+  // 刷新
+  const handleRefresh = () => {
+    fetchStocks();
+  };
+
+  // 分页变化
+  const handleTableChange = (newPagination: any) => {
+    setPagination({
+      current: newPagination.current,
+      pageSize: newPagination.pageSize,
+      total: pagination.total,
+    });
+  };
 
   const columns: ColumnsType<any> = [
     {
@@ -148,7 +190,7 @@ const Market = () => {
       fixed: 'right',
       width: 120,
       render: (_, record) => (
-        <Button type="primary" size="small" onClick={() => setSelectedStock(record.code)}>
+        <Button type="primary" size="small" onClick={() => handleDetail(record.code)}>
           详情
         </Button>
       ),
@@ -163,32 +205,65 @@ const Market = () => {
           allowClear
           enterButton={<SearchOutlined />}
           style={{ width: 300 }}
-          onSearch={setSearchKeyword}
+          onSearch={handleSearch}
         />
         <Select
           placeholder="选择板块"
           allowClear
           style={{ width: 150 }}
+          onChange={handleSectorChange}
         >
           <Option value="医药">医药</Option>
           <Option value="银行">银行</Option>
           <Option value="白酒">白酒</Option>
           <Option value="房地产">房地产</Option>
         </Select>
-        <Button icon={<ReloadOutlined />}>刷新</Button>
+        <Select
+          placeholder="数据源"
+          value={dataSource}
+          onChange={handleDataSourceChange}
+          style={{ width: 150 }}
+        >
+          <Option value="auto">自动</Option>
+          <Option value="baostock">BaoStock</Option>
+          <Option value="akshare">AkShare</Option>
+          <Option value="tushare">Tushare</Option>
+          <Option value="sina">新浪</Option>
+          <Option value="tencent">腾讯</Option>
+          <Option value="eastmoney">东方财富</Option>
+        </Select>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <CalendarOutlined style={{ color: '#666' }} />
+          <DatePicker
+            value={selectedDate}
+            onChange={handleDateChange}
+            placeholder="选择交易日"
+            allowClear={false}
+            style={{ width: 180 }}
+          />
+        </div>
+        <Button icon={<ReloadOutlined />} onClick={handleRefresh}>刷新</Button>
       </div>
 
-      <Table
-        columns={columns}
-        dataSource={mockStocks}
-        scroll={{ x: 1200 }}
-        pagination={{
-          total: mockStocks.length,
-          pageSize: 10,
-          showSizeChanger: true,
-          showQuickJumper: true,
-        }}
-      />
+      <Spin spinning={loading}>
+        <Table
+          columns={columns}
+          dataSource={stocks}
+          rowKey="code"
+          scroll={{ x: 1200 }}
+          pagination={{
+            current: pagination.current,
+            pageSize: pagination.pageSize,
+            total: pagination.total,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            onChange: (page, pageSize) => {
+              setPagination({ ...pagination, current: page, pageSize: pageSize || 10 });
+            },
+          }}
+          onChange={handleTableChange}
+        />
+      </Spin>
     </div>
   );
 };

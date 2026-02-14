@@ -1,6 +1,6 @@
 /** 股票服务 */
 import apiClient from './api';
-import type { Stock, PaginatedResponse } from '@types/api';
+import type { Stock, PaginatedResponse } from '../types/api';
 
 export const stockService = {
   /** 获取股票列表 */
@@ -9,6 +9,7 @@ export const stockService = {
     page_size?: number;
     sector?: string;
     keyword?: string;
+    data_source?: string;
   } = {}) {
     return apiClient.get<PaginatedResponse<any>>('/stocks', { params });
   },

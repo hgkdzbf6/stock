@@ -12,9 +12,35 @@ class MarketService:
     """市场行情服务"""
 
     def __init__(self):
+        # 从环境变量读取配置
+        data_source = getattr(settings, 'DATA_SOURCE', 'akshare')
+        tushare_token = getattr(settings, 'TUSHARE_TOKEN', None)
+        
+        logger.info(f"初始化MarketService，数据源: {data_source}")
+        logger.info(f"Tushare Token: {'已配置' if tushare_token else '未配置'}")
+        
         self.data_fetcher = DataFetcher(
-            source='akshare'  # 默认使用akshare
+            token=tushare_token,
+            source=data_source
         )
+    
+    def _ensure_data_fetcher(self):
+        """确保data_fetcher使用最新配置"""
+        from core.config import settings
+        current_source = getattr(settings, 'DATA_SOURCE', 'akshare')
+        current_token = getattr(settings, 'TUSHARE_TOKEN', None)
+        
+        # 如果配置有变化，重新初始化data_fetcher
+        if (self.data_fetcher.source != current_source or 
+            (current_source == 'tushare' and current_token and 
+             not hasattr(self.data_fetcher, 'pro'))):
+            logger.info(f"重新初始化data_fetcher，数据源: {current_source}")
+            self.data_fetcher = DataFetcher(
+                token=current_token,
+                source=current_source
+            )
+        
+        return self.data_fetcher
 
     async def get_realtime_quote(self, stock_code: str) -> dict:
         """

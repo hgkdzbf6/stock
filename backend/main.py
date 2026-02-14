@@ -74,9 +74,11 @@ app = FastAPI(
 )
 
 # 配置CORS
+cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
+logger.info(f"CORS允许的源: {cors_origins}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(origin) for origin in settings.CORS_ORIGINS],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -86,6 +88,10 @@ app.add_middleware(
 # 注册API路由
 from api import api_router
 app.include_router(api_router, prefix="/api/v1")
+
+# 注册WebSocket路由
+from api.websocket import websocket_router
+app.include_router(websocket_router)
 
 
 # 健康检查

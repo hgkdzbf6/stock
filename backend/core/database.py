@@ -2,26 +2,28 @@
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 from core.config import settings
-import os
 
-# 尝试使用PostgreSQL，如果失败则降级到SQLite
-try:
-    DATABASE_URL = os.getenv(
-        'DATABASE_URL',
-        'sqlite+aiosqlite:///./stock.db'
-    )
-    
-    # 如果配置的是postgresql但连接失败，使用SQLite
-    if 'postgresql' in DATABASE_URL:
-        try:
-            # 测试连接
-            import asyncpg
-        except ImportError:
-            print("警告: asyncpg未安装，降级到SQLite")
-            DATABASE_URL = 'sqlite+aiosqlite:///./stock.db'
-except Exception as e:
-    print(f"警告: 数据库配置错误，使用SQLite: {e}")
-    DATABASE_URL = 'sqlite+aiosqlite:///./stock.db'
+# 从settings中获取数据库URL
+DATABASE_URL = settings.DATABASE_URL
+
+# 检测数据库类型并选择合适的驱动
+if 'postgresql' in DATABASE_URL:
+    try:
+        import asyncpg
+        print(f"✅ 使用PostgreSQL数据库")
+    except ImportError:
+        print("⚠️  asyncpg未安装，降级到SQLite")
+        DATABASE_URL = 'sqlite+aiosqlite:///./stock.db'
+elif 'mysql' in DATABASE_URL:
+    try:
+        import aiomysql
+        print(f"✅ 使用MySQL数据库")
+    except ImportError:
+        print("⚠️  aiomysql未安装，降级到SQLite")
+        DATABASE_URL = 'sqlite+aiosqlite:///./stock.db'
+else:
+    # 默认使用SQLite
+    print(f"✅ 使用SQLite数据库")
 
 # 创建异步引擎
 pool_kwargs = {}

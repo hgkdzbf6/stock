@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import Market from './pages/Market';
 import StockDetail from './pages/StockDetail';
 import Strategies from './pages/Strategies';
+import DataDownload from './pages/DataDownload';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="market" element={<Market />} />
             <Route path="stock/:code" element={<StockDetail />} />
             <Route path="strategies" element={<Strategies />} />
+            <Route path="data-download" element={<DataDownload />} />
           </Route>
         </Routes>
       </BrowserRouter>

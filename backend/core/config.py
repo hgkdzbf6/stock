@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     LOG_LEVEL: str = "INFO"
 
+    # 数据源配置
+    TUSHARE_TOKEN: Optional[str] = None
+    DATA_SOURCE: str = "akshare"  # 'akshare' 或 'tushare'
+
     # 数据库配置
     DATABASE_URL: str
     DB_PASSWORD: str = ""
@@ -50,8 +54,8 @@ class Settings(BaseSettings):
     # Grafana配置
     GRAFANA_PASSWORD: str = ""
 
-    # CORS配置 - 改为字符串列表，在应用中转换
-    CORS_ORIGINS: List[str] = []
+    # CORS配置 - 使用字符串，在应用中转换为列表
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
 
     @field_validator("ALERT_EMAILS", mode="before")
     @classmethod
@@ -60,18 +64,6 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [i.strip() for i in v.split(",") if i.strip()]
         return v
-
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        """解析CORS配置"""
-        if isinstance(v, str):
-            if not v:
-                return []
-            return [i.strip() for i in v.split(",") if i.strip()]
-        if isinstance(v, list):
-            return v
-        return []
 
     model_config = SettingsConfigDict(
         env_file=".env",

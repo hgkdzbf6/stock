@@ -66,7 +66,7 @@ async def get_quote(code: str):
 @router.get("/kline/{code}")
 async def get_kline(
     code: str,
-    freq: str = Query("daily", regex="^(1min|5min|15min|30min|60min|daily)$"),
+    freq: str = Query("daily", pattern="^(1min|5min|15min|30min|60min|daily)$"),
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD")
 ):
@@ -112,7 +112,7 @@ async def get_kline(
 @router.get("/indicators/{code}")
 async def get_indicators(
     code: str,
-    freq: str = Query("daily", regex="^(1min|5min|15min|30min|60min|daily)$"),
+    freq: str = Query("daily", pattern="^(1min|5min|15min|30min|60min|daily)$"),
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
     indicators: List[str] = Query(

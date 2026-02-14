@@ -1,17 +1,30 @@
 """安全认证模块"""
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from core.config import settings
+from pydantic import BaseModel
+
 
 # 密码加密上下文
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # HTTP Bearer 认证
 security = HTTPBearer()
+
+
+class User(BaseModel):
+    """用户模型"""
+    user_id: str
+    username: Optional[str] = None
+    exp: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -52,7 +65,7 @@ def decode_access_token(token: str) -> dict:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
-) -> dict:
+) -> User:
     """获取当前用户"""
     token = credentials.credentials
     payload = decode_access_token(token)
@@ -70,4 +83,16 @@ async def get_current_user(
     # if user is None:
     #     raise HTTPException(status_code=404, detail="User not found")
 
-    return {"user_id": user_id, **payload}
+    return User(
+        user_id=user_id,
+        username=payload.get("username"),
+        exp=payload.get("exp")
+    )
+
+
+async def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> str:
+    """获取当前用户ID"""
+    user = await get_current_user(credentials)
+    return user.user_id

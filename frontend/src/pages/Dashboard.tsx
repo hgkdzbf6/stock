@@ -1,41 +1,46 @@
-import { Row, Col, Card, Statistic, Table, Tag } from 'antd';
+import { Row, Col, Card, Statistic, Table, Tag, Spin } from 'antd';
 import {
   ArrowUpOutlined,
   ArrowDownOutlined,
-  DollarOutlined,
   TrophyOutlined,
 } from '@ant-design/icons';
+import { useState, useEffect } from 'react';
+import { stockService } from '@services/stock';
+
+interface Stock {
+  code: string;
+  name: string;
+  price?: number;
+  change?: number;
+  change_pct?: number;
+  volume?: number;
+}
 
 const Dashboard = () => {
-  const mockStocks = [
-    {
-      key: '1',
-      code: '600771',
-      name: '东阳光',
-      price: 10.5,
-      change: 0.2,
-      change_pct: 1.94,
-      volume: 1000000,
-    },
-    {
-      key: '2',
-      code: '000001',
-      name: '平安银行',
-      price: 12.3,
-      change: -0.15,
-      change_pct: -1.2,
-      volume: 2000000,
-    },
-    {
-      key: '3',
-      code: '600519',
-      name: '贵州茅台',
-      price: 1850.0,
-      change: 25.5,
-      change_pct: 1.4,
-      volume: 50000,
-    },
-  ];
+  const [loading, setLoading] = useState(false);
+  const [stocks, setStocks] = useState<Stock[]>([]);
+
+  // 获取股票列表
+  useEffect(() => {
+    const fetchStocks = async () => {
+      try {
+        setLoading(true);
+        const response = await stockService.getStockList({ page: 1, page_size: 10 });
+        
+        if (response.code === 200 && response.data) {
+          // 转换数据格式
+          const stockList = response.data.items || [];
+          setStocks(stockList);
+        }
+      } catch (error) {
+        console.error('获取股票列表失败:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStocks();
+  }, []);
 
   const columns = [
     {
@@ -96,7 +101,6 @@ const Dashboard = () => {
               prefix="¥"
               precision={2}
               valueStyle={{ color: '#3f8600' }}
-              prefix={<DollarOutlined />}
             />
           </Card>
         </Col>
@@ -137,12 +141,15 @@ const Dashboard = () => {
 
       {/* 关注股票 */}
       <Card title="关注股票" style={{ marginBottom: 24 }}>
-        <Table
-          dataSource={mockStocks}
-          columns={columns}
-          pagination={false}
-          size="middle"
-        />
+        <Spin spinning={loading}>
+          <Table
+            dataSource={stocks}
+            columns={columns}
+            pagination={false}
+            size="middle"
+            rowKey="code"
+          />
+        </Spin>
       </Card>
     </div>
   );

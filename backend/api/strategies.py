@@ -4,8 +4,48 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, date
 from loguru import logger
+from services.backtest_service import BacktestEngine
 
 router = APIRouter()
+
+# 预设策略模板
+STRATEGY_TEMPLATES = {
+    'MA': {
+        'name': '双均线策略',
+        'description': '基于短期和长期移动平均线交叉',
+        'params': {
+            'short_window': {'type': 'int', 'default': 5, 'min': 1, 'max': 60, 'description': '短期均线周期'},
+            'long_window': {'type': 'int', 'default': 20, 'min': 1, 'max': 200, 'description': '长期均线周期'},
+            'stop_loss': {'type': 'float', 'default': 0.1, 'min': 0, 'max': 1, 'description': '止损比例'}
+        }
+    },
+    'RSI': {
+        'name': 'RSI策略',
+        'description': '基于相对强弱指标的超买超卖',
+        'params': {
+            'rsi_window': {'type': 'int', 'default': 14, 'min': 5, 'max': 30, 'description': 'RSI周期'},
+            'oversold': {'type': 'int', 'default': 30, 'min': 10, 'max': 40, 'description': '超卖阈值'},
+            'overbought': {'type': 'int', 'default': 70, 'min': 60, 'max': 90, 'description': '超买阈值'}
+        }
+    },
+    'BOLL': {
+        'name': '布林带策略',
+        'description': '基于布林带的突破交易',
+        'params': {
+            'boll_window': {'type': 'int', 'default': 20, 'min': 5, 'max': 50, 'description': '布林带周期'},
+            'num_std': {'type': 'float', 'default': 2, 'min': 1, 'max': 3, 'description': '标准差倍数'}
+        }
+    },
+    'MACD': {
+        'name': 'MACD策略',
+        'description': '基于MACD指标的趋势跟踪',
+        'params': {
+            'fast': {'type': 'int', 'default': 12, 'min': 5, 'max': 20, 'description': '快线周期'},
+            'slow': {'type': 'int', 'default': 26, 'min': 10, 'max': 50, 'description': '慢线周期'},
+            'signal': {'type': 'int', 'default': 9, 'min': 5, 'max': 20, 'description': '信号线周期'}
+        }
+    }
+}
 
 
 class StrategyCreate(BaseModel):
@@ -31,6 +71,8 @@ class BacktestRequest(BaseModel):
     end_date: date
     frequency: str = "daily"
     initial_capital: float = 100000.0
+    strategy_type: str = "MA"
+    custom_params: Optional[Dict[str, Any]] = None
 
 
 @router.get("")
@@ -203,37 +245,59 @@ async def run_backtest(strategy_id: int, request: BacktestRequest):
     try:
         logger.info(f"运行回测: strategy_id={strategy_id}, stock={request.stock_code}")
 
-        # TODO: 实现回测逻辑
-        # 1. 获取策略
-        # 2. 获取股票数据
-        # 3. 计算信号
-        # 4. 运行回测
-        # 5. 保存结果
-
-        # 临时返回模拟结果
-        task_id = f"BT{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
+        # 获取策略模板
+        strategy_template = STRATEGY_TEMPLATES.get(request.strategy_type, STRATEGY_TEMPLATES['MA'])
+        
+        # 构建策略参数
+        strategy_params = {
+            'type': request.strategy_type,
+            'name': strategy_template['name'],
+            'description': strategy_template['description']
+        }
+        
+        # 添加默认参数
+        for param_name, param_config in strategy_template['params'].items():
+            strategy_params[param_name] = param_config['default']
+        
+        # 如果有自定义参数，覆盖默认值
+        if request.custom_params:
+            strategy_params.update(request.custom_params)
+        
+        # 创建回测引擎
+        engine = BacktestEngine(
+            initial_capital=request.initial_capital,
+            commission=0.0003,  # 万三手续费
+            slippage=0.001  # 千一滑点
+        )
+        
+        # 运行回测
+        result = await engine.run_backtest(
+            stock_code=request.stock_code,
+            start_date=datetime.combine(request.start_date, datetime.min.time()),
+            end_date=datetime.combine(request.end_date, datetime.max.time()),
+            freq=request.frequency,
+            strategy_params=strategy_params,
+            data_source='auto'
+        )
+        
         return {
             "code": 200,
-            "message": "回测任务已提交",
-            "data": {
-                "task_id": task_id,
-                "status": "pending"
-            }
+            "message": "回测完成",
+            "data": result
         }
 
     except Exception as e:
         logger.error(f"运行回测失败: {e}")
         raise HTTPException(
             status_code=500,
-            detail="运行回测失败"
+            detail=f"运行回测失败: {str(e)}"
         )
 
 
 @router.post("/{strategy_id}/optimize")
 async def optimize_strategy(
     strategy_id: int,
-    method: str = Query("grid_search", regex="^(grid_search|genetic|bayesian)$"),
+    method: str = Query("grid_search", pattern="^(grid_search|genetic|bayesian)$"),
     stock_code: str = Query(...),
     param_ranges: Dict[str, Any] = None
 ):
