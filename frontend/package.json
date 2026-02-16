@@ -8,7 +8,10 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,json,css,md}\"",
+    "test": "npm run test:components && npm run test:services",
+    "test:components": "echo '组件测试开发中...'",
+    "test:services": "echo '服务测试开发中...'"
   },
   "dependencies": {
     "@ant-design/charts": "^2.0.0",
