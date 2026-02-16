@@ -21,6 +21,7 @@ interface MarketKLineChartProps {
 export default function MarketKLineChart({ height = '600px', theme = 'light' }: MarketKLineChartProps) {
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<string>('SH000001');
+  const [normalizedCode, setNormalizedCode] = useState<string>('000001');
   const [kLineData, setKLineData] = useState<any[]>([]);
   const [marketStats, setMarketStats] = useState({
     open: 0,
@@ -58,11 +59,12 @@ export default function MarketKLineChart({ height = '600px', theme = 'light' }: 
       startDate.setDate(startDate.getDate() - 90);
       
       // 转换代码格式：去除SH/SZ前缀，只保留6位数字
-      const normalizedCode = indexCode.replace(/^(SH|SZ|sh|sz)/, '');
+      const code = indexCode.replace(/^(SH|SZ|sh|sz)/, '');
+      setNormalizedCode(code);
       
       // 调用市场服务获取指数数据
       const response = await marketService.getKlineData({
-        code: normalizedCode,
+        code: code,
         freq: 'daily',
         start_date: startDate.toISOString().split('T')[0],
         end_date: endDate.toISOString().split('T')[0]
@@ -316,7 +318,7 @@ export default function MarketKLineChart({ height = '600px', theme = 'light' }: 
         {kLineData.length > 0 ? (
           <EnhancedKLineChart
             data={kLineData}
-            title={`${selectedIndexInfo?.name || selectedIndex}`}
+            title={`${selectedIndexInfo?.name || selectedIndex} (${normalizedCode})`}
             subtitle={selectedIndexInfo?.description || ''}
             height={height}
             showVolume={true}
