@@ -7,19 +7,26 @@ from data_adapters import AdapterFactory, StockQuote, KlineData
 
 
 class DataFetcher:
-    """数据获取器 - 使用适配器模式支持多种数据源"""
+    """数据获取器 - 仅使用真实数据源，不使用 mock"""
 
-    def __init__(self, token: Optional[str] = None, source: str = 'ashare'):
+    def __init__(self, token: Optional[str] = None, source: str = 'auto'):
         """
         初始化数据获取器
 
         Args:
             token: tushare API token
-            source: 数据源 ('ashare', 'tushare', 'akshare', 'baostock', 'sina', 'tencent', 'eastmoney', 'mock', 'auto')
+            source: 数据源 ('ashare', 'tushare', 'akshare', 'baostock', 'sina', 'tencent', 'eastmoney', 'auto')
+                    注意：不支持 'mock'，明确要求只使用真实数据
         """
         self.source = source
         self.adapter_factory = AdapterFactory(tushare_token=token)
-        logger.info(f"数据源: {source}")
+        
+        # 明确禁止使用 mock 数据源
+        if source.lower() == 'mock':
+            logger.error("明确禁止使用 mock 数据源")
+            raise ValueError("Mock 数据源已被禁用，系统仅使用真实市场数据")
+        
+        logger.info(f"数据源: {source} (仅真实数据)")
 
     async def get_data(
         self,
@@ -38,7 +45,10 @@ class DataFetcher:
             freq: 数据频率 ('1min', '5min', '15min', '30min', '60min', '1d')
 
         Returns:
-            DataFrame包含OHLCV数据
+            DataFrame包含OHLCV数据，如果所有数据源失败则返回None
+
+        Raises:
+            Exception: 当所有数据源都失败时抛出异常
         """
         logger.info(f"获取股票数据: {code}, {start_date} 到 {end_date}, 频率: {freq}")
 
@@ -47,10 +57,11 @@ class DataFetcher:
             code, start_date, end_date, freq
         )
         
-        if not kline_data_list:
-            logger.warning(f"未获取到数据，使用mock")
-            return self._generate_mock_dataframe(code, start_date, end_date, freq)
-
+        if not kline_data_list or len(kline_data_list) == 0:
+            error_msg = f"所有真实数据源都失败，无法获取 {code} 的 {freq} 数据"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
         # 转换为DataFrame
         data = []
         for kline in kline_data_list:
@@ -77,110 +88,50 @@ class DataFetcher:
         end_date: datetime,
         freq: str
     ) -> tuple[List[KlineData], str]:
-        """获取K线数据并返回使用的数据源"""
-        if self.source == 'auto':
-            return await self.adapter_factory.auto_get_kline_data(
-                code, start_date, end_date, freq
-            )
-        else:
-            adapter = self.adapter_factory.get_adapter(self.source)
-            if adapter:
-                return await adapter.get_kline_data(code, start_date, end_date, freq), self.source
-            else:
-                # 降级到auto模式
-                return await self.adapter_factory.auto_get_kline_data(
-                    code, start_date, end_date, freq
-                )
-
-    def _generate_mock_dataframe(
-        self,
-        code: str,
-        start_date: datetime,
-        end_date: datetime,
-        freq: str
-    ) -> pd.DataFrame:
-        """生成模拟DataFrame数据"""
-        import numpy as np
+        """
+        获取K线数据并返回使用的数据源
         
-        logger.info(f"生成模拟数据: {code}, {start_date} 到 {end_date}, {freq}")
-
-        freq_minutes = {
-            '1min': 1,
-            '5min': 5,
-            '15min': 15,
-            '30min': 30,
-            '60min': 60
-        }
-        interval_minutes = freq_minutes.get(freq, 30)
-
-        date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
-
-        all_data = []
-        base_price = 10.0
-
-        for date in date_range:
-            if date.weekday() >= 5:
-                continue
-
-            if interval_minutes == 30:
-                time_points = [
-                    (10, 0), (10, 30), (11, 0), (11, 30),
-                    (13, 30), (14, 0), (14, 30), (15, 0)
-                ]
-                timestamps = [date.replace(hour=hour, minute=minute, second=0) for hour, minute in time_points]
-            elif freq == '1d':
-                timestamps = [date]
-            else:
-                morning_times = []
-                current_time = date.replace(hour=9, minute=30, second=0)
-                end_morning = date.replace(hour=11, minute=30, second=0)
-                while current_time <= end_morning:
-                    morning_times.append(current_time)
-                    current_time += pd.Timedelta(minutes=interval_minutes)
-
-                afternoon_times = []
-                current_time = date.replace(hour=13, minute=0, second=0)
-                end_afternoon = date.replace(hour=15, minute=0, second=0)
-                while current_time <= end_afternoon:
-                    afternoon_times.append(current_time)
-                    current_time += pd.Timedelta(minutes=interval_minutes)
-
-                timestamps = morning_times + afternoon_times
-
-            for timestamp in timestamps:
-                price_change = np.random.normal(0, 0.015)
-                base_price *= (1 + price_change)
-                base_price = max(base_price, 1.0)
-
-                volatility = abs(np.random.normal(0, 0.008))
-                high = base_price * (1 + volatility)
-                low = base_price * (1 - volatility)
-
-                if all_data:
-                    open_price = all_data[-1]['close'] * (1 + np.random.normal(0, 0.003))
+        仅尝试真实数据源，不使用 mock
+        """
+        logger.info(f"尝试从真实数据源获取K线数据: {code}, {freq}")
+        
+        if self.source == 'auto':
+            # auto 模式：按优先级尝试真实数据源
+            # 优先级：akshare > ashare > tushare > eastmoney > sina > tencent > baostock
+            sources_to_try = ['akshare', 'ashare', 'tushare', 'eastmoney', 'sina', 'tencent', 'baostock']
+        else:
+            # 指定数据源
+            sources_to_try = [self.source]
+        
+        last_error = None
+        
+        for source in sources_to_try:
+            try:
+                logger.info(f"尝试数据源: {source}")
+                adapter = self.adapter_factory.get_adapter(source)
+                
+                if adapter:
+                    kline_data = await adapter.get_kline_data(code, start_date, end_date, freq)
+                    
+                    if kline_data and len(kline_data) > 0:
+                        logger.info(f"数据源 {source} 成功返回 {len(kline_data)} 条数据")
+                        return kline_data, source
+                    else:
+                        logger.warning(f"数据源 {source} 未返回数据")
+                        last_error = f"{source} 未返回数据"
                 else:
-                    open_price = base_price
-
-                close_price = base_price
-                high = max(high, open_price, close_price)
-                low = min(low, open_price, close_price)
-                volume = np.random.randint(5000, 50000)
-
-                all_data.append({
-                    'date': timestamp,
-                    'open': round(open_price, 2),
-                    'high': round(high, 2),
-                    'low': round(low, 2),
-                    'close': round(close_price, 2),
-                    'volume': volume
-                })
-
-        df = pd.DataFrame(all_data)
-        df.set_index('date', inplace=True)
-        df = df[['open', 'high', 'low', 'close', 'volume']]
-
-        logger.info(f"生成模拟数据完成: {len(df)}条记录")
-        return df
+                    logger.warning(f"无法获取 {source} 适配器")
+                    last_error = f"{source} 适配器不可用"
+            
+            except Exception as e:
+                logger.warning(f"数据源 {source} 失败: {e}")
+                last_error = f"{source} 错误: {str(e)}"
+                continue
+        
+        # 所有数据源都失败
+        error_msg = f"所有真实数据源都失败，最后错误: {last_error}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
 
     async def get_stock_list(
         self,
@@ -199,47 +150,56 @@ class DataFetcher:
         try:
             logger.info(f"获取股票列表: page={page}, page_size={page_size}, 数据源: {self.source}")
             
-            # 使用适配器获取数据
-            try:
-                if self.source == 'auto':
-                    stocks, used_source = await self.adapter_factory.auto_get_stock_list(
-                        page, page_size, keyword
-                    )
-                else:
-                    adapter = self.adapter_factory.get_adapter(self.source)
+            # 确定要尝试的数据源
+            if self.source == 'auto':
+                sources_to_try = ['akshare', 'ashare', 'tushare', 'eastmoney']
+            else:
+                sources_to_try = [self.source]
+            
+            last_error = None
+            
+            # 尝试数据源
+            for source in sources_to_try:
+                try:
+                    logger.info(f"尝试从 {source} 获取股票列表")
+                    adapter = self.adapter_factory.get_adapter(source)
+                    
                     if adapter:
                         stocks = await adapter.get_stock_list(page, page_size, keyword)
-                        used_source = self.source
-                    else:
-                        stocks, used_source = await self.adapter_factory.auto_get_stock_list(
-                            page, page_size, keyword
-                        )
-            except Exception as e:
-                logger.warning(f"使用数据源 {self.source} 失败，尝试auto模式: {e}")
-                stocks, used_source = await self.adapter_factory.auto_get_stock_list(
-                    page, page_size, keyword
-                )
+                        
+                        if stocks and len(stocks) > 0:
+                            # 转换为字典格式（向后兼容）
+                            stocks_dict = []
+                            for stock in stocks:
+                                stocks_dict.append({
+                                    '代码': stock.code,
+                                    '名称': stock.name,
+                                    '最新价': stock.price,
+                                    '涨跌额': stock.change,
+                                    '涨跌幅': stock.change_pct,
+                                    '成交量': stock.volume,
+                                    '成交额': stock.amount,
+                                    '市值': stock.market_cap,
+                                    '开盘': stock.open,
+                                    '最高': stock.high,
+                                    '最低': stock.low,
+                                    '昨收': stock.pre_close
+                                })
+                            
+                            logger.info(f"从 {source} 获取成功: {len(stocks_dict)} 只股票")
+                            return stocks_dict
+                        else:
+                            last_error = f"{source} 未返回数据"
+                    
+                except Exception as e:
+                    logger.warning(f"从 {source} 获取股票列表失败: {e}")
+                    last_error = str(e)
+                    continue
             
-            # 转换为字典格式（向后兼容）
-            stocks_dict = []
-            for stock in stocks:
-                stocks_dict.append({
-                    '代码': stock.code,
-                    '名称': stock.name,
-                    '最新价': stock.price,
-                    '涨跌额': stock.change,
-                    '涨跌幅': stock.change_pct,
-                    '成交量': stock.volume,
-                    '成交额': stock.amount,
-                    '市值': stock.market_cap,
-                    '开盘': stock.open,
-                    '最高': stock.high,
-                    '最低': stock.low,
-                    '昨收': stock.pre_close
-                })
-            
-            logger.info(f"获取成功: {len(stocks_dict)} 只股票，数据源: {used_source}")
-            return stocks_dict
+            # 所有数据源都失败
+            error_msg = f"所有真实数据源都失败: {last_error}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
             
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
@@ -256,33 +216,52 @@ class DataFetcher:
         try:
             logger.info(f"搜索股票: {keyword}")
             
-            # 使用适配器搜索
+            # 确定要尝试的数据源
             if self.source == 'auto':
-                stocks, used_source = await self.adapter_factory.auto_search_stocks(keyword, limit)
+                sources_to_try = ['akshare', 'ashare', 'tushare', 'eastmoney']
             else:
-                adapter = self.adapter_factory.get_adapter(self.source)
-                if adapter:
-                    stocks = await adapter.search_stocks(keyword, limit)
-                    used_source = self.source
-                else:
-                    stocks, used_source = await self.adapter_factory.auto_search_stocks(keyword, limit)
+                sources_to_try = [self.source]
             
-            # 转换为字典格式（向后兼容）
-            stocks_dict = []
-            for stock in stocks:
-                stocks_dict.append({
-                    '代码': stock.code,
-                    '名称': stock.name,
-                    '最新价': stock.price,
-                    '涨跌额': stock.change,
-                    '涨跌幅': stock.change_pct,
-                    '成交量': stock.volume,
-                    '市值': stock.market_cap
-                })
+            last_error = None
             
-            logger.info(f"搜索成功: {len(stocks_dict)} 只股票，数据源: {used_source}")
-            return stocks_dict
+            # 尝试数据源
+            for source in sources_to_try:
+                try:
+                    logger.info(f"尝试从 {source} 搜索股票")
+                    adapter = self.adapter_factory.get_adapter(source)
+                    
+                    if adapter:
+                        stocks = await adapter.search_stocks(keyword, limit)
+                        
+                        if stocks and len(stocks) > 0:
+                            # 转换为字典格式（向后兼容）
+                            stocks_dict = []
+                            for stock in stocks:
+                                stocks_dict.append({
+                                    '代码': stock.code,
+                                    '名称': stock.name,
+                                    '最新价': stock.price,
+                                    '涨跌额': stock.change,
+                                    '涨跌幅': stock.change_pct,
+                                    '成交量': stock.volume,
+                                    '市值': stock.market_cap
+                                })
+                            
+                            logger.info(f"从 {source} 搜索成功: {len(stocks_dict)} 只股票")
+                            return stocks_dict
+                        else:
+                            last_error = f"{source} 未返回结果"
+                    
+                except Exception as e:
+                    logger.warning(f"从 {source} 搜索股票失败: {e}")
+                    last_error = str(e)
+                    continue
+            
+            # 所有数据源都失败
+            error_msg = f"所有真实数据源都失败: {last_error}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
             
         except Exception as e:
             logger.error(f"搜索股票失败: {e}")
-            return []
+            raise

@@ -11,8 +11,9 @@ from services.data_download_service import DataDownloadService
 router = APIRouter(tags=["数据下载"])
 
 
-# 初始化服务
-download_service = DataDownloadService()
+# 初始化服务（使用DuckDB）
+download_service = DataDownloadService(use_duckdb=True)
+logger.info("数据下载API初始化完成")
 
 
 # 请求模型

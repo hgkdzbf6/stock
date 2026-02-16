@@ -93,17 +93,28 @@ class BaseAdapter(ABC):
         except Exception:
             return False
     
-    def normalize_code(self, code: str) -> str:
+    @staticmethod
+    def normalize_code(code: str) -> str:
         """
-        标准化股票代码（去除市场后缀）
+        标准化股票代码（去除市场前缀和后缀）
         
         Args:
-            code: 原始代码
+            code: 原始代码 (支持格式: sh600771, sz000001, sh600771.SZ, sz000001.SH, sh.600771, sz.000001)
             
         Returns:
-            标准化后的代码
+            标准化后的代码 (纯数字)
         """
-        return code.replace('.SH', '').replace('.SZ', '').replace('sh.', '').replace('sz.', '')
+        result = code
+        # 去除 .SH 和 .SZ 后缀
+        result = result.replace('.SH', '').replace('.SZ', '')
+        # 去除 sh. 和 sz. 前缀
+        result = result.replace('sh.', '').replace('sz.', '')
+        # 去除 sh 和 sz 前缀 (不带点的)
+        if result.startswith('sh') and len(result) > 2 and result[2].isdigit():
+            result = result[2:]
+        if result.startswith('sz') and len(result) > 2 and result[2].isdigit():
+            result = result[2:]
+        return result
     
     def add_market_suffix(self, code: str) -> str:
         """
@@ -113,7 +124,7 @@ class BaseAdapter(ABC):
             code: 原始代码
             
         Returns:
-            带市场后缀的代码
+            带市场后缀的代码 (格式: sh.600771 或 sz.000001)
         """
         code = self.normalize_code(code)
         if code.startswith('6'):

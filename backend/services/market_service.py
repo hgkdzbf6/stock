@@ -53,9 +53,9 @@ class MarketService:
             实时行情数据
         """
         try:
-            # 获取最新数据
+            # 获取最新数据 - 使用更宽的时间范围以确保能获取到数据
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=1)
+            start_date = end_date - timedelta(days=30)  # 扩大到30天
 
             df = await self.data_fetcher.get_data(
                 stock_code, start_date, end_date, freq='1d'

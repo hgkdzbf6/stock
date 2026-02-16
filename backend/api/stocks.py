@@ -6,6 +6,9 @@ from datetime import datetime
 from services.market_service import market_service
 from services.data_download_service import DataDownloadService
 from services.data_storage_service import DataStorageService
+from services.duckdb_storage_service import DuckDBStorageService
+from data_adapters.base import BaseAdapter
+from services.stock_code_service import stock_code_service
 from loguru import logger
 
 router = APIRouter()
@@ -56,7 +59,15 @@ async def get_stocks(
         # 优先使用本地数据
         if use_local:
             try:
-                storage = DataStorageService()
+                # 优先使用DuckDB
+                try:
+                    storage = DuckDBStorageService()
+                    logger.info("使用DuckDB读取本地数据")
+                except Exception as e:
+                    logger.warning(f"DuckDB初始化失败，使用CSV存储: {e}")
+                    storage = DataStorageService()
+                    logger.info("使用CSV读取本地数据")
+                
                 result = storage.get_downloaded_data_list(
                     stock_code=None,
                     limit=page_size,
@@ -71,12 +82,21 @@ async def get_stocks(
                     for record in result['downloads']:
                         # 读取最新一条数据作为价格信息
                         try:
-                            data = storage.load_downloaded_data(
-                                stock_code=record['stock_code'],
-                                start_date=datetime.strptime(record['start_date'], '%Y-%m-%d'),
-                                end_date=datetime.strptime(record['end_date'], '%Y-%m-%d'),
-                                frequency=record['frequency']
-                            )
+                            # 根据存储类型选择加载方法
+                            if isinstance(storage, DuckDBStorageService):
+                                data = storage.load_kline_data(
+                                    stock_code=record['stock_code'],
+                                    start_date=datetime.strptime(record['start_date'], '%Y-%m-%d') if record['start_date'] else datetime(2020, 1, 1),
+                                    end_date=datetime.strptime(record['end_date'], '%Y-%m-%d') if record['end_date'] else datetime.now(),
+                                    frequency=record['frequency']
+                                )
+                            else:
+                                data = storage.load_downloaded_data(
+                                    stock_code=record['stock_code'],
+                                    start_date=datetime.strptime(record['start_date'], '%Y-%m-%d'),
+                                    end_date=datetime.strptime(record['end_date'], '%Y-%m-%d'),
+                                    frequency=record['frequency']
+                                )
                             
                             if data is not None and len(data) > 0:
                                 latest = data.iloc[-1]
@@ -201,47 +221,31 @@ async def get_stock(code: str):
     try:
         logger.info(f"获取股票详情: {code}")
 
-        # TODO: 从数据库获取股票详情
-        # 这里临时返回模拟数据
-        stocks = await market_service.data_fetcher.get_stock_list()
-        stock = None
+        # 使用静态方法标准化股票代码
+        normalized_code = BaseAdapter.normalize_code(code)
+        logger.info(f"标准化后的股票代码: {code} -> {normalized_code}")
 
-        for s in stocks:
-            if str(s.get('代码')) == code or str(s.get('代码')) == code.replace('.SH', '').replace('.SZ', ''):
-                stock = s
-                break
-
+        # 使用本地股票代码服务查找股票
+        stock = stock_code_service.get_stock_info(normalized_code)
+        
         if not stock:
+            # 如果精确匹配失败，尝试代码搜索
+            stocks = stock_code_service.search_by_code(normalized_code, limit=1)
+            if stocks:
+                stock = stocks[0]
+                logger.info(f"通过代码搜索找到股票: {normalized_code}")
+        
+        if not stock:
+            logger.warning(f"未找到股票: {code} (标准化后: {normalized_code})")
             raise HTTPException(
                 status_code=404,
                 detail="股票不存在"
             )
 
-        # 字段名映射：中文 -> 英文
-        field_map = {
-            '代码': 'code',
-            '名称': 'name',
-            '最新价': 'price',
-            '涨跌额': 'change',
-            '涨跌幅': 'change_pct',
-            '成交量': 'volume',
-            '成交额': 'amount',
-            '市值': 'market_cap',
-            '开盘': 'open',
-            '最高': 'high',
-            '最低': 'low',
-            '昨收': 'pre_close',
-        }
-        
-        mapped_stock = {}
-        for cn_key, en_key in field_map.items():
-            if cn_key in stock:
-                mapped_stock[en_key] = stock[cn_key]
-
         return {
             "code": 200,
             "message": "success",
-            "data": mapped_stock
+            "data": stock
         }
 
     except HTTPException:
@@ -265,7 +269,20 @@ async def search_stocks(keyword: str, limit: int = Query(20, ge=1, le=100)):
     """
     try:
         logger.info(f"搜索股票: {keyword}")
-
+        
+        # 优先使用本地stock_code_service
+        local_stocks = stock_code_service.fuzzy_search(keyword, limit=limit)
+        
+        if local_stocks:
+            logger.info(f"从本地搜索到 {len(local_stocks)} 只股票")
+            return {
+                "code": 200,
+                "message": "success",
+                "data": local_stocks[:limit]
+            }
+        
+        # 如果本地没有结果，使用远程API
+        logger.info("本地无搜索结果，尝试远程API")
         stocks = await market_service.data_fetcher.search_stocks(keyword)
 
         # 字段名映射：中文 -> 英文

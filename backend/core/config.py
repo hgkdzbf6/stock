@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # 数据源配置
     TUSHARE_TOKEN: Optional[str] = None
-    DATA_SOURCE: str = "akshare"  # 'akshare' 或 'tushare'
+    DATA_SOURCE: str = "ashare"  # 'ashare'（3rdparty）, 'akshare' 或 'tushare'
 
     # 数据库配置
     DATABASE_URL: str

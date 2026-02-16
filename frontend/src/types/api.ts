@@ -45,13 +45,17 @@ export interface Stock {
 /** 实时行情 */
 export interface Quote {
   stock_code: string;
+  code?: string;
+  name?: string;
   price: number;
   change: number;
   change_pct: number;
   open: number;
   high: number;
   low: number;
+  pre_close?: number;
   volume: number;
+  amount?: number;
   timestamp: string;
 }
 

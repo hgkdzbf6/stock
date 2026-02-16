@@ -7,23 +7,40 @@ import pandas as pd
 
 from .data_fetcher import DataFetcher
 from .data_storage_service import DataStorageService
+from .duckdb_storage_service import DuckDBStorageService
+from .stock_code_service import stock_code_service
 
 
 class DataDownloadService:
-    """数据下载服务"""
+    """数据下载服务 - 仅使用真实数据源"""
     
-    def __init__(self, storage_service: Optional[DataStorageService] = None):
+    def __init__(self, storage_service: Optional[DataStorageService] = None, use_duckdb: bool = True):
         """
         初始化数据下载服务
         
         Args:
-            storage_service: 数据存储服务实例
+            storage_service: 数据存储服务实例（优先使用DuckDB）
+            use_duckdb: 是否使用DuckDB存储（默认True）
         """
-        self.storage = storage_service or DataStorageService()
-        self.data_fetcher = DataFetcher(source='sina')  # 优先使用新浪API
+        # 优先使用DuckDB存储
+        if use_duckdb:
+            try:
+                self.storage = DuckDBStorageService()
+                self.use_duckdb = True
+                logger.info("使用DuckDB存储服务")
+            except Exception as e:
+                logger.warning(f"DuckDB初始化失败，使用CSV存储: {e}")
+                self.storage = storage_service or DataStorageService()
+                self.use_duckdb = False
+        else:
+            self.storage = storage_service or DataStorageService()
+            self.use_duckdb = False
+        
+        # 使用 ashare 作为默认数据源（真实数据）
+        self.data_fetcher = DataFetcher(source='ashare')  
         self.download_progress = {}  # 存储下载进度
         
-        logger.info("数据下载服务初始化完成")
+        logger.info("数据下载服务初始化完成（仅使用真实数据源）")
     
     async def download_stock_data(
         self,
@@ -31,7 +48,7 @@ class DataDownloadService:
         start_date: datetime,
         end_date: datetime,
         frequency: str = 'daily',
-        source: str = 'auto',
+        source: str = 'ashare',
         force_download: bool = False
     ) -> Dict:
         """
@@ -42,30 +59,50 @@ class DataDownloadService:
             start_date: 开始日期
             end_date: 结束日期
             frequency: 数据频率
-            source: 数据源
+            source: 数据源（仅真实数据源）
             force_download: 是否强制重新下载
             
         Returns:
             下载结果字典
         """
+        # 明确禁止 mock 数据源
+        if source and source.lower() == 'mock':
+            error_msg = f"Mock数据源已被禁用，仅允许使用真实数据源。请求的源: {source}"
+            logger.error(error_msg)
+            return {
+                'status': 'failed',
+                'message': error_msg,
+                'stock_code': stock_code,
+                'source': source
+            }
+        
         try:
             download_id = f"{stock_code}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
             
-            logger.info(f"开始下载数据: {stock_code}, {start_date} - {end_date}")
+            logger.info(f"开始下载数据: {stock_code}, {start_date} - {end_date}, 频率: {frequency}, 数据源: {source}")
+            
+            # 从本地stock_list获取股票名称
+            stock_name = None
+            try:
+                stock_info = stock_code_service.get_stock_info(stock_code)
+                if stock_info:
+                    stock_name = stock_info.get('name') or stock_info.get('名称')
+                    logger.info(f"获取股票名称: {stock_code} -> {stock_name}")
+            except Exception as e:
+                logger.warning(f"获取股票名称失败: {e}")
             
             # 如果不是强制下载，检查数据是否存在
-            if not force_download:
+            if not force_download and self.use_duckdb:
                 check_result = self.storage.check_data_exists(
                     stock_code, start_date, end_date, frequency
                 )
                 
-                if check_result['exists']:
+                if check_result:
                     overlap_type = check_result['overlap_type']
                     
                     if overlap_type == 'exact':
                         # 数据已存在且完全匹配
-                        existing_data = check_result['data']
-                        data = self.storage.load_downloaded_data(
+                        data = self.storage.load_kline_data(
                             stock_code, start_date, end_date, frequency
                         )
                         
@@ -76,21 +113,24 @@ class DataDownloadService:
                                 'message': '数据已存在，使用已有数据',
                                 'download_id': download_id,
                                 'stock_code': stock_code,
+                                'stock_name': stock_name,
                                 'data_count': len(data),
                                 'data': data,
-                                'existing_data': existing_data
+                                'existing_data': check_result,
+                                'source': source
                             }
                     
-                    elif overlap_type == 'partial':
+                    elif overlap_type in ['partial_start', 'partial_end']:
                         # 数据部分重叠
-                        existing_data = check_result['data']
-                        logger.warning(f"数据部分重叠: {existing_data['start_date']} - {existing_data['end_date']}")
+                        logger.warning(f"数据部分重叠: {check_result['start_date']} - {check_result['end_date']}")
                         return {
                             'status': 'partial_overlap',
-                            'message': f'数据部分重叠，已存在数据范围: {existing_data["start_date"]} 至 {existing_data["end_date"]}',
+                            'message': f'数据部分重叠，已存在数据范围: {check_result["start_date"]} 至 {check_result["end_date"]}',
                             'download_id': download_id,
                             'stock_code': stock_code,
-                            'existing_data': existing_data
+                            'stock_name': stock_name,
+                            'existing_data': check_result,
+                            'source': source
                         }
             
             # 开始下载数据
@@ -110,36 +150,61 @@ class DataDownloadService:
             }
             freq = freq_map.get(frequency, 'daily')
             
-            # 下载数据（临时创建使用指定source的fetcher）
+            # 下载数据（创建使用指定source的fetcher）
             temp_fetcher = DataFetcher(source=source)
-            data = await temp_fetcher.get_data(
-                code=stock_code,
-                start_date=start_date,
-                end_date=end_date,
-                freq=freq
-            )
             
-            if data is None or len(data) == 0:
-                logger.error(f"下载数据失败: 未获取到数据")
+            try:
+                data = await temp_fetcher.get_data(
+                    code=stock_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    freq=freq
+                )
+            except Exception as e:
+                logger.error(f"数据源 {source} 下载数据失败: {e}")
                 return {
                     'status': 'failed',
-                    'message': '下载数据失败：未获取到数据',
+                    'message': f'下载数据失败: 数据源 {source} 失败: {str(e)}',
                     'download_id': download_id,
-                    'stock_code': stock_code
+                    'stock_code': stock_code,
+                    'source': source
+                }
+            
+            if data is None or len(data) == 0:
+                logger.error(f"数据源 {source} 未获取到数据")
+                return {
+                    'status': 'failed',
+                    'message': f'下载数据失败: 数据源 {source} 未返回数据',
+                    'download_id': download_id,
+                    'stock_code': stock_code,
+                    'source': source
                 }
             
             logger.info(f"数据下载成功: {len(data)}条记录")
+            logger.info(f"Storage类型: {type(self.storage).__name__}, use_duckdb: {self.use_duckdb}")
             
-            # 保存数据（股票名称作为可选，不阻塞下载）
-            record_id = self.storage.save_downloaded_data(
-                stock_code=stock_code,
-                stock_name=None,  # 先不获取名称，避免阻塞
-                start_date=start_date,
-                end_date=end_date,
-                frequency=frequency,
-                data=data,
-                source=source
-            )
+            # 保存数据
+            if self.use_duckdb:
+                # 使用DuckDB存储，传入股票名称
+                record_id = self.storage.save_kline_data(
+                    df=data,
+                    stock_code=stock_code,
+                    frequency=frequency,
+                    stock_name=stock_name
+                )
+                logger.info(f"使用DuckDB保存成功: record_id={record_id}")
+            else:
+                # 使用CSV存储，传入股票名称
+                record_id = self.storage.save_downloaded_data(
+                    stock_code=stock_code,
+                    stock_name=stock_name,
+                    start_date=start_date,
+                    end_date=end_date,
+                    frequency=frequency,
+                    data=data,
+                    source=source
+                )
+                logger.info(f"使用CSV保存成功: record_id={record_id}")
             
             logger.info(f"数据保存成功: 记录ID={record_id}")
             
@@ -148,10 +213,11 @@ class DataDownloadService:
                 'message': '下载完成',
                 'download_id': download_id,
                 'stock_code': stock_code,
-                'stock_name': None,  # 股票名称暂不提供
+                'stock_name': stock_name,
                 'data_count': len(data),
                 'record_id': record_id,
-                'data': data
+                'data': data,
+                'source': source
             }
             
         except Exception as e:
@@ -160,7 +226,8 @@ class DataDownloadService:
                 'status': 'failed',
                 'message': f'下载数据失败: {str(e)}',
                 'download_id': download_id,
-                'stock_code': stock_code
+                'stock_code': stock_code,
+                'source': source
             }
     
     async def batch_download(
@@ -169,7 +236,7 @@ class DataDownloadService:
         start_date: datetime,
         end_date: datetime,
         frequency: str = 'daily',
-        source: str = 'auto'
+        source: str = 'ashare'
     ) -> Dict:
         """
         批量下载股票数据
@@ -179,11 +246,21 @@ class DataDownloadService:
             start_date: 开始日期
             end_date: 结束日期
             frequency: 数据频率
-            source: 数据源
+            source: 数据源（仅真实数据源）
             
         Returns:
             批量下载结果
         """
+        # 明确禁止 mock 数据源
+        if source and source.lower() == 'mock':
+            return {
+                'status': 'failed',
+                'message': 'Mock数据源已被禁用',
+                'total': len(stock_codes),
+                'success': 0,
+                'failed': len(stock_codes)
+            }
+        
         logger.info(f"开始批量下载: {len(stock_codes)}只股票")
         
         results = []
@@ -215,7 +292,8 @@ class DataDownloadService:
             'total': len(stock_codes),
             'success': success_count,
             'failed': failed_count,
-            'results': results
+            'results': results,
+            'source': source
         }
     
     async def get_download_status(self, download_id: str) -> Dict:
@@ -303,15 +381,33 @@ class DataDownloadService:
         Returns:
             可用性检查结果
         """
-        check_result = self.storage.check_data_exists(
-            stock_code, start_date, end_date, frequency
-        )
-        
-        return {
-            'available': check_result['exists'],
-            'overlap_type': check_result.get('overlap_type'),
-            'existing_data': check_result.get('data')
-        }
+        if self.use_duckdb:
+            check_result = self.storage.check_data_exists(
+                stock_code, start_date, end_date, frequency
+            )
+            
+            if check_result:
+                return {
+                    'available': True,
+                    'overlap_type': check_result.get('overlap_type'),
+                    'existing_data': check_result
+                }
+            else:
+                return {
+                    'available': False,
+                    'overlap_type': None,
+                    'existing_data': None
+                }
+        else:
+            check_result = self.storage.check_data_exists(
+                stock_code, start_date, end_date, frequency
+            )
+            
+            return {
+                'available': check_result['exists'],
+                'overlap_type': check_result.get('overlap_type'),
+                'existing_data': check_result.get('data')
+            }
     
     async def load_data_for_backtest(
         self,
@@ -334,22 +430,15 @@ class DataDownloadService:
         """
         logger.info(f"为回测加载数据: {stock_code}, {start_date} - {end_date}")
         
-        # 检查数据是否存在
-        check_result = self.storage.check_data_exists(
-            stock_code, start_date, end_date, frequency
-        )
-        
-        if not check_result['exists']:
-            logger.warning(f"回测数据不存在: {stock_code}")
-            return None
-        
-        if check_result['overlap_type'] == 'partial':
-            logger.warning(f"数据部分重叠，可能影响回测结果")
-        
         # 加载数据
-        data = self.storage.load_downloaded_data(
-            stock_code, start_date, end_date, frequency
-        )
+        if self.use_duckdb:
+            data = self.storage.load_kline_data(
+                stock_code, start_date, end_date, frequency
+            )
+        else:
+            data = self.storage.load_downloaded_data(
+                stock_code, start_date, end_date, frequency
+            )
         
         if data is not None:
             logger.info(f"回测数据加载成功: {len(data)}条记录")
@@ -357,26 +446,6 @@ class DataDownloadService:
             logger.error(f"回测数据加载失败")
         
         return data
-    
-    async def _get_stock_name(self, stock_code: str) -> Optional[str]:
-        """
-        获取股票名称
-        
-        Args:
-            stock_code: 股票代码
-            
-        Returns:
-            股票名称
-        """
-        try:
-            # 从股票列表中搜索
-            stocks = await self.data_fetcher.search_stocks(stock_code, limit=1)
-            if stocks and len(stocks) > 0:
-                return stocks[0].get('名称')
-            return None
-        except Exception as e:
-            logger.warning(f"获取股票名称失败: {e}")
-            return None
     
     def get_statistics(self) -> Dict:
         """
@@ -386,30 +455,36 @@ class DataDownloadService:
             统计信息
         """
         try:
-            result = self.storage.get_downloaded_data_list(limit=10000)
-            
-            downloads = result.get('downloads', [])
-            total = result.get('total', 0)
-            
-            # 统计信息
-            stock_count = len(set(d['stock_code'] for d in downloads))
-            total_data_points = sum(d['data_count'] for d in downloads)
-            total_file_size = sum(d['file_size'] for d in downloads)
-            
-            # 按频率统计
-            freq_stats = {}
-            for d in downloads:
-                freq = d['frequency']
-                freq_stats[freq] = freq_stats.get(freq, 0) + 1
-            
-            return {
-                'total_downloads': total,
-                'unique_stocks': stock_count,
-                'total_data_points': total_data_points,
-                'total_file_size': total_file_size,
-                'total_file_size_str': self.storage._format_file_size(total_file_size),
-                'frequency_distribution': freq_stats
-            }
+            if self.use_duckdb:
+                # 使用DuckDB统计
+                return self.storage.get_statistics()
+            else:
+                # 使用CSV统计
+                result = self.storage.get_downloaded_data_list(limit=10000)
+                
+                downloads = result.get('downloads', [])
+                total = result.get('total', 0)
+                
+                # 统计信息
+                stock_count = len(set(d['stock_code'] for d in downloads))
+                total_data_points = sum(d['data_count'] for d in downloads)
+                total_file_size = sum(d['file_size'] for d in downloads)
+                
+                # 按频率统计
+                freq_stats = {}
+                for d in downloads:
+                    freq = d['frequency']
+                    freq_stats[freq] = freq_stats.get(freq, 0) + 1
+                
+                return {
+                    'total_downloads': total,
+                    'unique_stocks': stock_count,
+                    'total_data_points': total_data_points,
+                    'total_file_size': total_file_size,
+                    'total_file_size_str': self.storage._format_file_size(total_file_size),
+                    'frequency_distribution': freq_stats,
+                    'data_sources': 'ashare (仅真实数据)'
+                }
         except Exception as e:
             logger.error(f"获取统计信息失败: {e}")
             return {}

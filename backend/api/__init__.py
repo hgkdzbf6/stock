@@ -8,6 +8,8 @@ from api.ai import router as ai_router
 from api.optimization import router as optimization_router
 from api.trading import router as trading_router
 from api.data_download import router as data_download_router
+from api.stock_code import router as stock_code_router
+from api.sector import router as sector_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -21,5 +23,7 @@ api_router.include_router(ai_router, prefix="/ai", tags=["ai"])
 api_router.include_router(optimization_router, tags=["optimization"])
 api_router.include_router(trading_router, tags=["trading"])
 api_router.include_router(data_download_router, prefix="/data", tags=["data-download"])
+api_router.include_router(stock_code_router, tags=["stock-code"])
+api_router.include_router(sector_router, tags=["sector"])
 
 __all__ = ['api_router']

@@ -1,6 +1,5 @@
 /** API客户端 */
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
-import type { ApiResponse } from '@types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -33,7 +32,7 @@ class ApiClient {
 
     // 响应拦截器
     this.client.interceptors.response.use(
-      (response: AxiosResponse<ApiResponse>) => {
+      (response: AxiosResponse) => {
         return response;
       },
       (error) => {
@@ -52,8 +51,9 @@ class ApiClient {
   async get<T = any>(
     url: string,
     config?: AxiosRequestConfig
-  ): Promise<ApiResponse<T>> {
-    const response = await this.client.get<ApiResponse<T>>(url, config);
+  ): Promise<T> {
+    const response = await this.client.get<T>(url, config);
+    // 直接返回响应数据（后端直接返回数据对象，不包装在ApiResponse中）
     return response.data;
   }
 
@@ -62,8 +62,9 @@ class ApiClient {
     url: string,
     data?: any,
     config?: AxiosRequestConfig
-  ): Promise<ApiResponse<T>> {
-    const response = await this.client.post<ApiResponse<T>>(url, data, config);
+  ): Promise<T> {
+    const response = await this.client.post<T>(url, data, config);
+    // 直接返回响应数据（后端直接返回数据对象，不包装在ApiResponse中）
     return response.data;
   }
 
@@ -72,8 +73,9 @@ class ApiClient {
     url: string,
     data?: any,
     config?: AxiosRequestConfig
-  ): Promise<ApiResponse<T>> {
-    const response = await this.client.put<ApiResponse<T>>(url, data, config);
+  ): Promise<T> {
+    const response = await this.client.put<T>(url, data, config);
+    // 直接返回响应数据（后端直接返回数据对象，不包装在ApiResponse中）
     return response.data;
   }
 
@@ -81,8 +83,9 @@ class ApiClient {
   async delete<T = any>(
     url: string,
     config?: AxiosRequestConfig
-  ): Promise<ApiResponse<T>> {
-    const response = await this.client.delete<ApiResponse<T>>(url, config);
+  ): Promise<T> {
+    const response = await this.client.delete<T>(url, config);
+    // 直接返回响应数据（后端直接返回数据对象，不包装在ApiResponse中）
     return response.data;
   }
 

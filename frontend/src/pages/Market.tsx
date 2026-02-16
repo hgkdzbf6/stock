@@ -4,6 +4,7 @@ import { SearchOutlined, ReloadOutlined, CalendarOutlined } from '@ant-design/ic
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
 import { stockService } from '@services/stock';
+import { sectorService } from '@services/sector';
 import dayjs, { Dayjs } from 'dayjs';
 
 const { Option } = Select;
@@ -33,6 +34,7 @@ const Market = () => {
     keyword: '',
     sector: '',
   });
+  const [sectors, setSectors] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<Dayjs | null>(dayjs());
   const [dataSource, setDataSource] = useState('auto'); // 默认auto模式
 
@@ -64,6 +66,15 @@ const Market = () => {
   }, [pagination.current, pagination.pageSize, filters.keyword, filters.sector, dataSource]);
 
   // 初始加载
+  // 加载板块列表
+  useEffect(() => {
+    sectorService.getSectorList()
+      .then(setSectors)
+      .catch(error => {
+        console.error('获取板块列表失败:', error);
+      });
+  }, []);
+  
   useEffect(() => {
     fetchStocks();
   }, [fetchStocks]);
@@ -213,10 +224,12 @@ const Market = () => {
           style={{ width: 150 }}
           onChange={handleSectorChange}
         >
-          <Option value="医药">医药</Option>
-          <Option value="银行">银行</Option>
-          <Option value="白酒">白酒</Option>
-          <Option value="房地产">房地产</Option>
+          {/* ✅ 使用动态板块列表 */}
+          {sectors.map(sector => (
+            <Option key={sector.code} value={sector.code}>
+              {sector.name}
+            </Option>
+          ))}
         </Select>
         <Select
           placeholder="数据源"

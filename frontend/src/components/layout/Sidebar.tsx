@@ -5,6 +5,7 @@ import {
   StockOutlined,
   AppstoreOutlined,
   DownloadOutlined,
+  BarChartOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -24,6 +25,11 @@ const Sidebar = () => {
       key: '/market',
       icon: <LineChartOutlined />,
       label: '行情',
+    },
+    {
+      key: '/kline',
+      icon: <BarChartOutlined />,
+      label: 'K线图',
     },
     {
       key: '/strategies',

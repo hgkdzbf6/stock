@@ -79,8 +79,36 @@ export interface StatisticsResponse {
  * 下载股票数据
  */
 export const downloadStockData = async (request: DownloadRequest): Promise<DownloadResponse> => {
-  const response = await api.post('/data/download', request);
-  return response.data;
+  try {
+    const response = await api.post('/data/download', request);
+    
+    // 确保响应包含必要的字段
+    if (!response) {
+      throw new Error('服务器返回了空响应');
+    }
+    
+    // 检查响应格式
+    if (!response.status) {
+      console.error('返回的数据格式不正确:', response);
+      throw new Error('服务器返回的数据格式不正确');
+    }
+    
+    return response;
+  } catch (error: any) {
+    console.error('下载API调用失败:', error);
+    
+    // 如果是网络错误或服务器错误，返回一个失败状态
+    if (error.response) {
+      // 服务器返回了错误状态码
+      throw new Error(error.response.data?.detail || error.response.data?.message || '服务器错误');
+    } else if (error.request) {
+      // 请求已发出但没有收到响应
+      throw new Error('无法连接到服务器，请检查网络连接');
+    } else {
+      // 其他错误
+      throw error;
+    }
+  }
 };
 
 /**
@@ -89,8 +117,13 @@ export const downloadStockData = async (request: DownloadRequest): Promise<Downl
 export const batchDownloadStockData = async (
   request: BatchDownloadRequest
 ): Promise<BatchDownloadResponse> => {
-  const response = await api.post('/data/batch-download', request);
-  return response.data;
+  try {
+    const response = await api.post('/data/batch-download', request);
+    return response;
+  } catch (error: any) {
+    console.error('批量下载失败:', error);
+    throw new Error(error.response?.data?.detail || error.message || '批量下载失败');
+  }
 };
 
 /**
@@ -102,10 +135,15 @@ export const checkDataAvailability = async (
   end_date: string,
   frequency: string = 'daily'
 ): Promise<CheckDataResponse> => {
-  const response = await api.get('/data/check', {
-    params: { stock_code, start_date, end_date, frequency }
-  });
-  return response.data;
+  try {
+    const response = await api.get('/data/check', {
+      params: { stock_code, start_date, end_date, frequency }
+    });
+    return response;
+  } catch (error: any) {
+    console.error('检查数据可用性失败:', error);
+    throw new Error(error.response?.data?.detail || error.message || '检查数据失败');
+  }
 };
 
 /**
@@ -116,34 +154,54 @@ export const getDownloadedList = async (
   limit: number = 100,
   offset: number = 0
 ): Promise<DownloadedListResponse> => {
-  const response = await api.get('/data/downloads', {
-    params: stock_code ? { stock_code, limit, offset } : { limit, offset }
-  });
-  return response.data;
+  try {
+    const response = await api.get('/data/downloads', {
+      params: stock_code ? { stock_code, limit, offset } : { limit, offset }
+    });
+    return response;
+  } catch (error: any) {
+    console.error('获取已下载数据列表失败:', error);
+    throw new Error(error.response?.data?.detail || error.message || '获取数据列表失败');
+  }
 };
 
 /**
  * 删除已下载数据
  */
 export const deleteDownloadedData = async (record_id: number): Promise<{ status: string; message: string }> => {
-  const response = await api.delete(`/data/downloads/${record_id}`);
-  return response.data;
+  try {
+    const response = await api.delete(`/data/downloads/${record_id}`);
+    return response;
+  } catch (error: any) {
+    console.error('删除数据失败:', error);
+    throw new Error(error.response?.data?.detail || error.message || '删除数据失败');
+  }
 };
 
 /**
  * 获取下载统计信息
  */
 export const getStatistics = async (): Promise<StatisticsResponse> => {
-  const response = await api.get('/data/statistics');
-  return response.data;
+  try {
+    const response = await api.get('/data/statistics');
+    return response;
+  } catch (error: any) {
+    console.error('获取统计信息失败:', error);
+    throw new Error(error.response?.data?.detail || error.message || '获取统计信息失败');
+  }
 };
 
 /**
  * 获取下载状态
  */
 export const getDownloadStatus = async (download_id: string): Promise<any> => {
-  const response = await api.get(`/data/status/${download_id}`);
-  return response.data;
+  try {
+    const response = await api.get(`/data/status/${download_id}`);
+    return response;
+  } catch (error: any) {
+    console.error('获取下载状态失败:', error);
+    throw new Error(error.response?.data?.detail || error.message || '获取下载状态失败');
+  }
 };
 
 export default {
