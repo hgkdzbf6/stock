@@ -121,12 +121,31 @@ class BaseAdapter(ABC):
         添加市场后缀
         
         Args:
-            code: 原始代码
+            code: 原始代码 (支持格式: sh600771, sz000001, SH000001, SZ399001)
             
         Returns:
             带市场后缀的代码 (格式: sh.600771 或 sz.000001)
         """
         code = self.normalize_code(code)
+        
+        # 确保是6位数字
+        if len(code) == 6 and code.isdigit():
+            # 第一位数字决定市场
+            # 股票代码：6开头=上海，其他=深圳
+            # 指数代码：0, 3, 7开头=上海，1, 2, 4开头=深圳
+            first_digit = code[0]
+            
+            if first_digit == '6':
+                # 股票：6开头=上海
+                return f"sh.{code}"
+            elif first_digit in ['0', '3', '7']:
+                # 指数：0, 3, 7=上海
+                return f"sh.{code}"
+            else:
+                # 其他=深圳
+                return f"sz.{code}"
+        
+        # 默认处理：6开头=上海
         if code.startswith('6'):
             return f"sh.{code}"
         else:

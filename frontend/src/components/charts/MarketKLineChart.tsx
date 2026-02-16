@@ -57,9 +57,12 @@ export default function MarketKLineChart({ height = '600px', theme = 'light' }: 
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - 90);
       
+      // 转换代码格式：去除SH/SZ前缀，只保留6位数字
+      const normalizedCode = indexCode.replace(/^(SH|SZ|sh|sz)/, '');
+      
       // 调用市场服务获取指数数据
       const response = await marketService.getKlineData({
-        code: indexCode,
+        code: normalizedCode,
         freq: 'daily',
         start_date: startDate.toISOString().split('T')[0],
         end_date: endDate.toISOString().split('T')[0]
