@@ -9,9 +9,36 @@ stock/
 ├── backend/           # 后端服务 (FastAPI + Python)
 ├── frontend/          # 前端应用 (React + TypeScript)
 ├── legacy/            # 原有代码（已迁移）
-├── PLAN.md           # 详细开发计划
+├── docs/              # 项目文档
+│   ├── reports/       # 开发报告
+│   └── guides/        # 指南文档
 └── README.md         # 项目说明
 ```
+
+## 文档索引
+
+### 快速开始
+- [快速开始指南](docs/guides/START_GUIDE.md) - 项目启动和配置指南
+- [系统设计文档](docs/guides/design.md) - 系统架构和设计思路
+- [开发计划](docs/guides/PLAN.md) - 详细的开发计划和里程碑
+
+### 架构文档
+- [架构标准](docs/ARCHITECTURE_STANDARDS.md) - 项目架构规范和设计原则
+- [框架概述](docs/FRAMEWORK_OVERVIEW.md) - 技术框架和核心概念
+- [K线图组件架构](docs/KLINE_CHART_COMPONENTS_ARCHITECTURE.md) - 图表组件设计
+
+### 开发报告
+- [项目状态总结](docs/reports/PROJECT_STATUS_SUMMARY.md) - 整体项目进度
+- [数据源优化](docs/reports/DATA_SOURCE_OPTIMIZATION.md) - 数据源优化方案
+- [缓存实现](docs/reports/CACHE_IMPLEMENTATION.md) - 缓存系统实现
+- [数据下载设计](docs/reports/DATA_DOWNLOAD_DESIGN.md) - 数据下载服务设计
+
+### 问题修复
+- [问题诊断](docs/reports/API_LOADING_ISSUES_DIAGNOSIS.md) - API加载问题诊断
+- [超时问题](docs/reports/TIMEOUT_ISSUE_DIAGNOSIS.md) - 超时问题分析
+- [启动问题](docs/reports/STARTUP_DIAGNOSIS.md) - 启动问题排查
+
+更多文档请查看 [docs/](docs/) 目录
 
 ## 技术栈
 
