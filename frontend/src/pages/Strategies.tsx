@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Table, Button, Tag, Space, Modal, Form, Input, Select, DatePicker, InputNumber, message, Spin, Card, Row, Col, Statistic, Tabs, Divider } from 'antd';
-import { PlusOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined } from '@ant-design/icons';
+import { PlusOutlined, PlayCircleOutlined, BarChartOutlined, LineChartOutlined, FileTextOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import { Line, LineChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -56,6 +57,7 @@ interface BacktestResult {
 }
 
 const Strategies = () => {
+  const navigate = useNavigate();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [backtestModalVisible, setBacktestModalVisible] = useState(false);
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
@@ -364,7 +366,7 @@ const Strategies = () => {
                 min={10000}
                 step={10000}
                 formatter={(value) => `¥ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                parser={(value) => value ? Number(value.replace(/\$\s?|(,*)/g, '')) : 10000}
+                parser={(value) => (value ? Number(value.replace(/¥\s?|(,*)/g, '')) : 10000) as number}
               />
             </Form.Item>
 
@@ -410,7 +412,23 @@ const Strategies = () => {
           {/* 回测结果 */}
           {backtestResult && (
             <div style={{ marginTop: 24 }}>
-              <Divider>回测结果</Divider>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <Divider orientation="left" style={{ margin: 0, flex: 1 }}>回测结果</Divider>
+                <Button 
+                  type="primary" 
+                  icon={<FileTextOutlined />} 
+                  onClick={() => {
+                    navigate('/backtest-report', { 
+                      state: { 
+                        backtestData: backtestResult,
+                        strategyName: selectedStrategy?.name 
+                      } 
+                    });
+                  }}
+                >
+                  查看详细报告
+                </Button>
+              </div>
               
               <Row gutter={16} style={{ marginBottom: 16 }}>
                 <Col span={6}>

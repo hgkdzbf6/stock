@@ -263,6 +263,17 @@ async def run_backtest(strategy_id: int, request: BacktestRequest):
         if request.custom_params:
             strategy_params.update(request.custom_params)
         
+        # 转换频率参数：将前端格式转换为数据获取器期望的格式
+        freq_mapping = {
+            'daily': '1d',
+            '60min': '60min',
+            '30min': '30min',
+            '15min': '15min',
+            '5min': '5min'
+        }
+        freq = freq_mapping.get(request.frequency, request.frequency)
+        logger.info(f"频率参数转换: {request.frequency} -> {freq}")
+        
         # 创建回测引擎
         engine = BacktestEngine(
             initial_capital=request.initial_capital,
@@ -275,7 +286,7 @@ async def run_backtest(strategy_id: int, request: BacktestRequest):
             stock_code=request.stock_code,
             start_date=datetime.combine(request.start_date, datetime.min.time()),
             end_date=datetime.combine(request.end_date, datetime.max.time()),
-            freq=request.frequency,
+            freq=freq,
             strategy_params=strategy_params,
             data_source='auto'
         )

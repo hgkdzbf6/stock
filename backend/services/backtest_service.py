@@ -233,7 +233,12 @@ class BacktestEngine:
         # 初始化
         self.portfolio = pd.DataFrame(index=df.index)
         self.portfolio['cash'] = self.initial_capital
-        self.portfolio['close'] = df['close']
+        
+        # 保留OHLC数据用于展示
+        for col in ['open', 'high', 'low', 'close']:
+            if col in df.columns:
+                self.portfolio[col] = df[col]
+                
         self.portfolio['signal'] = df['signal'].fillna(0)
         self.portfolio['shares'] = 0.0
         
@@ -411,11 +416,23 @@ class BacktestEngine:
         
         equity_curve = []
         for idx, row in self.portfolio.iterrows():
-            equity_curve.append({
+            point = {
                 'date': idx.strftime('%Y-%m-%d %H:%M:%S'),
                 'total_value': float(row['total_value']),
                 'cumulative_return': float(row['cumulative_returns']),
                 'drawdown': float(row['drawdown_pct'])
-            })
+            }
+            
+            # 如果原始数据中有OHLC，也包含进去用于前端K线图展示
+            if 'open' in row:
+                point['open'] = float(row['open'])
+                point['high'] = float(row['high'])
+                point['low'] = float(row['low'])
+                point['close'] = float(row['close'])
+            elif 'close' in row:
+                # 兜底逻辑：如果只有close，则OHLC都设为close
+                point['open'] = point['high'] = point['low'] = point['close'] = float(row['close'])
+                
+            equity_curve.append(point)
         
         return equity_curve

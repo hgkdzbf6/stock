@@ -6,6 +6,8 @@ import {
   AppstoreOutlined,
   DownloadOutlined,
   BarChartOutlined,
+  FileTextOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -35,6 +37,16 @@ const Sidebar = () => {
       key: '/strategies',
       icon: <AppstoreOutlined />,
       label: '策略',
+    },
+    {
+      key: '/ai-agent',
+      icon: <RobotOutlined />,
+      label: 'AI Agent',
+    },
+    {
+      key: '/backtest-report',
+      icon: <FileTextOutlined />,
+      label: '回测报告',
     },
     {
       key: '/data-download',

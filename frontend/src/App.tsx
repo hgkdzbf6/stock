@@ -9,6 +9,8 @@ import DataDownload from './pages/DataDownload';
 import TestSearch from './pages/TestSearch';
 import TailwindTest from './pages/TailwindTest';
 import KLineDashboard from './pages/KLineDashboard';
+import BacktestReport from './pages/BacktestReport';
+import AIAgent from './pages/AIAgent';
 
 function App() {
   return (
@@ -25,6 +27,8 @@ function App() {
           <Route path="strategies" element={<Strategies />} />
           <Route path="data-download" element={<DataDownload />} />
           <Route path="kline" element={<KLineDashboard />} />
+          <Route path="backtest-report" element={<BacktestReport />} />
+          <Route path="ai-agent" element={<AIAgent />} />
         </Route>
       </Routes>
     </BrowserRouter>
