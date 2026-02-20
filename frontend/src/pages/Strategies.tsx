@@ -53,6 +53,11 @@ interface BacktestResult {
     total_value: number;
     cumulative_return: number;
     drawdown: number;
+    open?: number;
+    high?: number;
+    low?: number;
+    close?: number;
+    volume?: number;
   }>;
 }
 

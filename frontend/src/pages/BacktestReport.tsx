@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { BacktestResult, EquityPoint, TradeRecord } from '../types/backtest';
 import dayjs from 'dayjs';
-import { ArrowLeft, Bell, Sun, Moon, AlertCircle, BarChart3, Table2 } from 'lucide-react';
+import { ArrowLeft, Bell, Sun, Moon, AlertCircle, BarChart3, Table2, Save, FolderOpen, Trash2 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { getBacktestReports, saveBacktestReport, loadBacktestReport, deleteBacktestReport, BacktestReportMetadata } from '../api/backtestReports';
 
 const BacktestReport: React.FC = () => {
   const location = useLocation();
@@ -12,29 +13,169 @@ const BacktestReport: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showTrendNumbers, setShowTrendNumbers] = useState(true);
 
-  // 获取从路由传递过来的真实数据
-  const backtestDataFromState = location.state?.backtestData;
-  const strategyNameFromState = location.state?.strategyName;
+  // 回测报告管理状态
+  const [backtestDataFromState, setBacktestDataFromState] = useState<any>(location.state?.backtestData);
+  const [strategyNameFromState, setStrategyNameFromState] = useState<string>(location.state?.strategyName);
+  const [reports, setReports] = useState<BacktestReportMetadata[]>([]);
+  const [selectedReport, setSelectedReport] = useState<string>('');
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showReportList, setShowReportList] = useState(false);
 
-  // 如果没有数据，显示空状态
-  if (!backtestDataFromState) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-        <AlertCircle size={48} className="text-gray-300 mb-4" />
-        <h2 className="text-xl font-bold text-gray-600">暂无回测数据</h2>
-        <p className="text-gray-400 mt-2">请先在策略管理页面运行回测</p>
-        <button 
-          onClick={() => navigate('/strategies')}
-          className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          返回策略管理
-        </button>
-      </div>
-    );
-  }
+  // 加载报告列表
+  const loadReports = async () => {
+    try {
+      setIsLoadingReports(true);
+      const data = await getBacktestReports();
+      setReports(data);
+    } catch (error) {
+      console.error('加载报告列表失败:', error);
+    } finally {
+      setIsLoadingReports(false);
+    }
+  };
+
+  // 保存当前回测报告
+  const handleSaveReport = async () => {
+    if (!backtestDataFromState) return;
+    
+    try {
+      setIsSaving(true);
+      await saveBacktestReport(backtestDataFromState, strategyNameFromState);
+      await loadReports(); // 重新加载报告列表
+      alert('回测报告保存成功！');
+    } catch (error) {
+      console.error('保存报告失败:', error);
+      alert('保存报告失败，请重试');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // 加载选中的回测报告
+  const handleLoadReport = async (filename: string) => {
+    if (!filename) return;
+    
+    try {
+      setIsLoading(true);
+      const result = await loadBacktestReport(filename);
+      setBacktestDataFromState(result.data);
+      setStrategyNameFromState(result.metadata?.strategy_name || '未知策略');
+      setSelectedReport(filename);
+    } catch (error) {
+      console.error('加载报告失败:', error);
+      alert('加载报告失败，请重试');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 删除报告
+  const handleDeleteReport = async (filename: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    
+    if (!confirm('确定要删除这个回测报告吗？')) return;
+    
+    try {
+      await deleteBacktestReport(filename);
+      await loadReports();
+      if (selectedReport === filename) {
+        setSelectedReport('');
+      }
+      alert('报告删除成功');
+    } catch (error) {
+      console.error('删除报告失败:', error);
+      alert('删除报告失败，请重试');
+    }
+  };
+
+  // 初始化时加载报告列表并自动加载最新的回测报告
+  useEffect(() => {
+    const initPage = async () => {
+      // 1. 加载报告列表
+      await loadReports();
+      
+      // 2. 如果有路由传递的新数据，优先使用
+      if (location.state?.backtestData) {
+        // 使用新回测数据
+        return;
+      }
+      
+      // 3. 尝试从localStorage恢复
+      const savedBacktestData = localStorage.getItem('currentBacktestData');
+      const savedStrategyName = localStorage.getItem('currentStrategyName');
+      
+      if (savedBacktestData && savedStrategyName) {
+        try {
+          setBacktestDataFromState(JSON.parse(savedBacktestData));
+          setStrategyNameFromState(savedStrategyName);
+          // 恢复成功，不需要加载服务器报告
+          return;
+        } catch (error) {
+          console.error('恢复回测数据失败:', error);
+          localStorage.removeItem('currentBacktestData');
+          localStorage.removeItem('currentStrategyName');
+        }
+      }
+      
+      // 4. 如果没有localStorage数据，自动加载服务器端最新的回测报告
+      const loadedReports = await getBacktestReports();
+      if (loadedReports.length > 0) {
+        // 加载最新的报告（第一个）
+        await handleLoadReport(loadedReports[0].filename);
+      }
+    };
+    
+    initPage();
+  }, [location.state?.backtestData]);
+
+  // 保存当前回测数据到localStorage（持久化）
+  useEffect(() => {
+    if (backtestDataFromState && strategyNameFromState) {
+      localStorage.setItem('currentBacktestData', JSON.stringify(backtestDataFromState));
+      localStorage.setItem('currentStrategyName', strategyNameFromState);
+    }
+  }, [backtestDataFromState, strategyNameFromState]);
+
+  // 如果有已保存的报告但没有当前数据，自动展开报告列表
+  useEffect(() => {
+    if (reports.length > 0 && !backtestDataFromState) {
+      setShowReportList(true);
+    }
+  }, [reports.length, backtestDataFromState]);
 
   // 数据适配：将后端返回的数据格式转换为前端展示所需的格式
   const displayData = useMemo(() => {
+    // 如果没有数据，返回默认值
+    if (!backtestDataFromState) {
+      return {
+        id: 'N/A',
+        strategy_name: '未知策略',
+        stock_code: '-',
+        start_date: '-',
+        end_date: '-',
+        create_time: '-',
+        frequency: '-',
+        initial_capital: 0,
+        final_capital: 0,
+        metrics: {
+          total_return: 0,
+          annual_return: 0,
+          max_drawdown: 0,
+          sharpe_ratio: 0,
+          win_rate: 0,
+          trade_count: 0,
+          profit_loss_ratio: 0,
+          volatility: 0,
+          calmar_ratio: 0,
+          max_single_profit: 0
+        },
+        trades: [],
+        equity_curve: []
+      } as BacktestResult;
+    }
+    
     const rawData = backtestDataFromState;
     
     // 转换净值曲线和K线数据
@@ -48,6 +189,7 @@ const BacktestReport: React.FC = () => {
       high: p.high,
       low: p.low,
       close: p.close,
+      volume: p.volume,  // 添加成交量数据
       ma5: p.ma5,
       ma20: p.ma20
     }));
@@ -132,6 +274,33 @@ const BacktestReport: React.FC = () => {
     return trendData;
   };
 
+  // 计算成交量数据 - 必须有真实volume数据
+  const volumeData = displayData.equity_curve.map((p, i) => {
+    // 判断涨跌：与昨日收盘价比较
+    const prev = i > 0 ? displayData.equity_curve[i - 1] : p;
+    if (!p.close || !prev.close) {
+      return { value: 0, itemStyle: { color: '#999' } };
+    }
+    
+    const isUp = p.close > prev.close;
+    
+    // 必须使用真实volume数据
+    if (p.volume && p.volume > 0) {
+      return {
+        value: p.volume,
+        itemStyle: {
+          color: isUp ? '#dc2626' : '#16a34a'  // 红涨绿跌
+        }
+      };
+    }
+    
+    // 没有volume数据时返回0（红色警告）
+    return { value: 0, itemStyle: { color: '#ff0000' } };
+  });
+  
+  // 检查是否有volume数据
+  const hasVolumeData = displayData.equity_curve.some(p => p.volume && p.volume > 0);
+
   // ECharts 配置
   const getCombinedOption = () => {
     const dates = displayData.equity_curve.map(p => p.date);
@@ -141,7 +310,7 @@ const BacktestReport: React.FC = () => {
     return {
       backgroundColor: 'transparent',
       legend: {
-        data: ['股价K线', '策略净值', 'MA5', 'MA20', '连涨连跌'],
+        data: ['股价K线', '成交量', '策略净值', 'MA5', 'MA20', '连涨连跌'],
         top: 0,
         left: 0,
         orient: 'horizontal',
@@ -160,22 +329,25 @@ const BacktestReport: React.FC = () => {
       },
       axisPointer: { link: [{ xAxisIndex: 'all' }] },
       grid: [
-        { left: 50, right: 50, top: 60, height: '40%' },      // K线主图
-        { left: 50, right: 50, top: '52%', height: '15%' },    // 策略净值
-        { left: 50, right: 50, top: '70%', height: '10%' },    // 盈亏分布
-        { left: 50, right: 50, top: '84%', height: '8%' }      // 回撤
+        { left: 50, right: 50, top: 60, height: '35%' },      // K线主图
+        { left: 50, right: 50, top: '47%', height: '12%' },    // 成交量
+        { left: 50, right: 50, top: '61%', height: '12%' },    // 策略净值
+        { left: 50, right: 50, top: '75%', height: '10%' },    // 盈亏分布
+        { left: 50, right: 50, top: '87%', height: '6%' }      // 回撤
       ],
       xAxis: [
         { type: 'category', data: dates, gridIndex: 0, axisLabel: { show: false }, axisLine: { lineStyle: { color: '#eee' } } },
         { type: 'category', data: dates, gridIndex: 1, axisLabel: { show: false }, axisTick: { show: false } },
         { type: 'category', data: dates, gridIndex: 2, axisLabel: { show: false }, axisTick: { show: false } },
-        { type: 'category', data: dates, gridIndex: 3, axisLabel: { fontSize: 10, color: '#999' }, axisTick: { show: false } }
+        { type: 'category', data: dates, gridIndex: 3, axisLabel: { show: false }, axisTick: { show: false } },
+        { type: 'category', data: dates, gridIndex: 4, axisLabel: { fontSize: 10, color: '#999' }, axisTick: { show: false } }
       ],
       yAxis: [
         { scale: true, gridIndex: 0, name: '价格', splitLine: { lineStyle: { type: 'dashed' } } },
-        { scale: true, gridIndex: 1, name: '净值', splitLine: { show: false } },
-        { gridIndex: 2, name: '盈亏(%)', splitLine: { show: false }, axisLabel: { fontSize: 9 } },
-        { gridIndex: 3, name: '回撤', splitLine: { show: false }, axisLabel: { show: false } }
+        { scale: true, gridIndex: 1, name: '成交量(元)', splitLine: { show: false }, axisLabel: { show: false } },
+        { scale: true, gridIndex: 2, name: '净值', splitLine: { show: false } },
+        { gridIndex: 3, name: '盈亏(%)', splitLine: { show: false }, axisLabel: { fontSize: 9 } },
+        { gridIndex: 4, name: '回撤', splitLine: { show: false }, axisLabel: { show: false } }
       ],
       series: [
         {
@@ -241,14 +413,14 @@ const BacktestReport: React.FC = () => {
               displayData.equity_curve.find(p => p.date === t.date)?.high || 0
             ],
             itemStyle: { 
-              color: t.type === 'up' ? '#16a34a' : '#dc2626',
-              borderColor: t.type === 'up' ? '#16a34a' : '#dc2626'
+              color: t.type === 'up' ? '#dc2626' : '#16a34a',  // 红涨绿跌
+              borderColor: t.type === 'up' ? '#dc2626' : '#16a34a'
             },
             label: {
               show: showTrendNumbers,
               fontSize: 11,
               fontWeight: 'bold',
-              color: t.type === 'up' ? '#16a34a' : '#dc2626',
+              color: t.type === 'up' ? '#dc2626' : '#16a34a',
               formatter: t.value.toString(),
               position: 'top',
               offset: [0, -3]
@@ -261,11 +433,19 @@ const BacktestReport: React.FC = () => {
           zlevel: 2
         },
         {
+          name: '成交量',
+          type: 'bar',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: volumeData,
+          barWidth: '60%'
+        },
+        {
           name: '策略净值',
           type: 'line',
           data: displayData.equity_curve.map(p => p.strategy_value),
-          xAxisIndex: 1,
-          yAxisIndex: 1,
+          xAxisIndex: 2,
+          yAxisIndex: 2,
           smooth: true,
           showSymbol: false,
           lineStyle: { width: 2, color: '#3b82f6' },
@@ -274,8 +454,8 @@ const BacktestReport: React.FC = () => {
         {
           name: '单笔盈亏',
           type: 'bar',
-          xAxisIndex: 2,
-          yAxisIndex: 2,
+          xAxisIndex: 3,
+          yAxisIndex: 3,
           data: displayData.equity_curve.map((p, i) => {
             const trade = displayData.trades.find(t => t.open_date === p.date);
             return trade ? (Math.random() - 0.5) * 20 : 0; // 真实数据中应使用 trade.profit_pct
@@ -287,8 +467,8 @@ const BacktestReport: React.FC = () => {
         {
           name: '回撤',
           type: 'line',
-          xAxisIndex: 3,
-          yAxisIndex: 3,
+          xAxisIndex: 4,
+          yAxisIndex: 4,
           data: displayData.equity_curve.map(p => p.drawdown),
           areaStyle: { color: 'rgba(239, 68, 68, 0.1)' },
           lineStyle: { width: 1, color: '#ef4444' },
@@ -316,12 +496,171 @@ const BacktestReport: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-4">
+          {/* 保存按钮 */}
+          <button
+            onClick={handleSaveReport}
+            disabled={isSaving || !backtestDataFromState}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+          >
+            <Save size={16} />
+            {isSaving ? '保存中...' : '保存报告'}
+          </button>
+
           <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 hover:bg-gray-100 rounded-full">
             {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
           </button>
           <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white text-xs font-bold">Z</div>
         </div>
       </header>
+
+      {/* 已保存的报告区域 */}
+      <div className="border-b bg-gray-50 px-6 py-4">
+        <div className="max-w-[1600px] mx-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <FolderOpen size={18} className="text-blue-600" />
+              <h3 className="text-lg font-semibold text-gray-800">已保存的回测报告</h3>
+              <span className="text-sm text-gray-500">
+                (存储位置: backend/data/backtest_reports/)
+              </span>
+            </div>
+            <button
+              onClick={() => setShowReportList(!showReportList)}
+              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              {showReportList ? '收起' : '展开'} {reports.length} 个报告
+            </button>
+          </div>
+
+          {showReportList && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {reports.map((report) => (
+                  <div
+                    key={report.filename}
+                    className="bg-white rounded-lg p-4 border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer group"
+                    onClick={() => handleLoadReport(report.filename)}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-bold text-gray-900 truncate">{report.stock_code}</span>
+                          <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded">
+                            {report.strategy_name}
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {report.start_date} ~ {report.end_date}
+                        </div>
+                      </div>
+                      <button
+                        onClick={(e) => handleDeleteReport(report.filename, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-red-500 hover:bg-red-50 rounded transition-all"
+                        title="删除报告"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+                      <span className="text-xs text-gray-400">
+                        创建于: {report.create_time}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleLoadReport(report.filename);
+                        }}
+                        disabled={isLoading}
+                        className="text-sm px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
+                      >
+                        加载
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {reports.length === 0 && (
+                <div className="text-center py-8 text-gray-500">
+                  <p>暂无已保存的回测报告</p>
+                  <p className="text-sm mt-1">点击"保存报告"按钮保存当前的回测结果</p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 加载状态 */}
+      {isLoading && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 flex items-center gap-3">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+            <span className="text-gray-700">正在加载回测报告...</span>
+          </div>
+        </div>
+      )}
+
+      {/* 无数据但有已保存报告时的界面 */}
+      {!backtestDataFromState && reports.length > 0 && (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-6">
+          <AlertCircle size={48} className="text-gray-300 mb-4" />
+          <h2 className="text-xl font-bold text-gray-600">暂无回测数据</h2>
+          <p className="text-gray-400 mt-2 mb-6">请选择一个已保存的回测报告，或在策略管理页面运行回测</p>
+          
+          {/* 报告列表 */}
+          <div className="w-full max-w-2xl bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-800">已保存的回测报告</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {reports.map((report) => (
+                <div
+                  key={report.filename}
+                  onClick={() => handleLoadReport(report.filename)}
+                  className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-gray-900">{report.stock_code}</span>
+                      <span className="text-sm text-gray-500">-</span>
+                      <span className="text-gray-700">{report.strategy_name}</span>
+                    </div>
+                    <div className="text-sm text-gray-500 mt-1">
+                      时间: {report.start_date} ~ {report.end_date} | 创建于: {report.create_time}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleLoadReport(report.filename);
+                      }}
+                      disabled={isLoading}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300"
+                    >
+                      加载
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteReport(report.filename, e)}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <button 
+            onClick={() => navigate('/strategies')}
+            className="mt-6 px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            返回策略管理
+          </button>
+        </div>
+      )}
 
       <main className="max-w-[1600px] mx-auto p-6">
         <div className="bg-white rounded-xl p-6 shadow-sm border border-gray-100 mb-6">
@@ -399,8 +738,24 @@ const BacktestReport: React.FC = () => {
           {/* Tab 内容 */}
           <div className="p-4">
             {activeTab === 'chart' && (
-              <div className="h-[800px] w-full">
-                <ReactECharts option={getCombinedOption()} style={{ height: '100%', width: '100%' }} />
+              <div>
+                {/* 警告消息 */}
+                {!hasVolumeData && displayData.equity_curve.length > 0 && (
+                  <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="font-semibold text-red-800 mb-1">缺少成交量数据</p>
+                      <p className="text-sm text-red-700">
+                        当前回测报告缺少成交量数据。请重新运行回测以获取完整的成交量信息。
+                        成交量数据是回测分析的重要组成部分，建议确保数据源提供完整的数据。
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="h-[800px] w-full">
+                  <ReactECharts option={getCombinedOption()} style={{ height: '100%', width: '100%' }} />
+                </div>
               </div>
             )}
 

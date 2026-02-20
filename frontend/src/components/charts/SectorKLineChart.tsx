@@ -1,12 +1,9 @@
 /** 板块K线图组件 - 显示指定板块的K线图 */
-import { useState, useEffect } from 'react';
-import { Spin, message, Select, Space, Card, Row, Col, Statistic } from 'antd';
-import { ArrowUpOutlined, ArrowDownOutlined } from '@ant-design/icons';
+import { useState, useEffect, useMemo } from 'react';
+import { Spin, message, AutoComplete, Space, Card, Row, Col, Statistic, Tag } from 'antd';
+import { ArrowUpOutlined, ArrowDownOutlined, SearchOutlined } from '@ant-design/icons';
 import EnhancedKLineChart from './EnhancedKLineChart';
-import { stockService } from '@services/stock';
 import { sectorService, Sector } from '@services/sector';
-
-const { Option } = Select;
 
 interface SectorKLineChartProps {
   height?: string;
@@ -15,8 +12,10 @@ interface SectorKLineChartProps {
 
 export default function SectorKLineChart({ height = '600px', theme = 'light' }: SectorKLineChartProps) {
   const [loading, setLoading] = useState(false);
+  const [loadingSectors, setLoadingSectors] = useState(false);
   const [sectors, setSectors] = useState<Sector[]>([]);
   const [selectedSector, setSelectedSector] = useState<string>('');
+  const [searchValue, setSearchValue] = useState<string>('');
   const [kLineData, setKLineData] = useState<any[]>([]);
   const [sectorStats, setSectorStats] = useState({
     totalStocks: 0,
@@ -37,8 +36,38 @@ export default function SectorKLineChart({ height = '600px', theme = 'light' }: 
     }
   }, [selectedSector]);
 
+  // 过滤板块列表（支持模糊搜索）
+  const filteredSectors = useMemo(() => {
+    if (!searchValue.trim()) {
+      return sectors;
+    }
+    
+    const lowerSearch = searchValue.toLowerCase();
+    return sectors.filter(sector => 
+      sector.name.toLowerCase().includes(lowerSearch) ||
+      sector.code.toLowerCase().includes(lowerSearch)
+    );
+  }, [sectors, searchValue]);
+
+  // AutoComplete选项数据
+  const autoCompleteOptions = useMemo(() => {
+    return filteredSectors.map(sector => ({
+      value: sector.code,
+      label: (
+        <div>
+          <span style={{ fontWeight: 'bold' }}>{sector.name}</span>
+          <Tag color={sector.type === 'industry' ? 'blue' : 'purple'} style={{ marginLeft: 8 }}>
+            {sector.type === 'industry' ? '行业' : '概念'}
+          </Tag>
+          <span style={{ color: '#999', marginLeft: 8, fontSize: 12 }}>{sector.market}</span>
+        </div>
+      )
+    }));
+  }, [filteredSectors]);
+
   const loadSectors = async () => {
     try {
+      setLoadingSectors(true);
       const data = await sectorService.getSectorList();
       setSectors(data);
       if (data.length > 0) {
@@ -47,6 +76,8 @@ export default function SectorKLineChart({ height = '600px', theme = 'light' }: 
     } catch (error) {
       message.error('加载板块列表失败');
       console.error('加载板块列表失败:', error);
+    } finally {
+      setLoadingSectors(false);
     }
   };
 
@@ -54,17 +85,15 @@ export default function SectorKLineChart({ height = '600px', theme = 'light' }: 
     try {
       setLoading(true);
       
-      // 获取板块的股票列表（第一页）
-      const response = await stockService.getStockList({
-        sector: sectorCode,
-        page: 1,
-        page_size: 50,
-        data_source: 'auto'
-      });
+      // 获取板块的股票列表（第一页，最多50只）
+      const stocksResponse = await sectorService.getStocksBySector(
+        sectorCode,
+        1,
+        50
+      );
 
-      // response已经包含items和total
-      const stocks = response?.items || [];
-      const total = response?.total || 0;
+      const stocks = stocksResponse?.items || [];
+      const total = stocksResponse?.total || 0;
       
       // 计算板块统计
       const upCount = stocks.filter((s: any) => s.change_pct > 0).length;
@@ -80,56 +109,30 @@ export default function SectorKLineChart({ height = '600px', theme = 'light' }: 
         avgChange: avgChange
       });
 
-      // 模拟生成板块指数K线数据（实际应该从后端获取）
-      const simulatedKLineData = generateSectorIndexKLine(stocks);
-      setKLineData(simulatedKLineData);
+      // 获取真实的板块K线数据
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 90);
+      
+      const klineResponse = await sectorService.getKlineData({
+        code: sectorCode,
+        freq: 'daily',
+        start_date: startDate.toISOString().split('T')[0],
+        end_date: endDate.toISOString().split('T')[0]
+      });
+      
+      if (klineResponse && klineResponse.data && klineResponse.data.length > 0) {
+        setKLineData(klineResponse.data);
+      } else {
+        message.warning('暂无板块K线数据');
+        setKLineData([]);
+      }
     } catch (error) {
       message.error('加载板块数据失败');
       console.error('加载板块数据失败:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  // 生成板块指数K线数据（模拟）
-  const generateSectorIndexKLine = (stocks: any[]): any[] => {
-    // 这里应该是从后端API获取实际的板块指数数据
-    // 目前使用模拟数据展示功能
-    const endDate = new Date();
-    const data: any[] = [];
-    
-    // 生成60天的K线数据
-    for (let i = 60; i >= 0; i--) {
-      const date = new Date(endDate);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      // 基于股票价格生成指数
-      const baseIndex = 1000;
-      const randomChange = (Math.random() - 0.5) * 50;
-      const indexValue = baseIndex + randomChange - i * 2;
-      
-      const volatility = 10 + Math.random() * 20;
-      const open = indexValue + (Math.random() - 0.5) * volatility;
-      const close = indexValue + (Math.random() - 0.5) * volatility;
-      const high = Math.max(open, close) + Math.random() * volatility;
-      const low = Math.min(open, close) - Math.random() * volatility;
-      
-      data.push({
-        date: dateStr,
-        open: parseFloat(open.toFixed(2)),
-        high: parseFloat(high.toFixed(2)),
-        low: parseFloat(low.toFixed(2)),
-        close: parseFloat(close.toFixed(2)),
-        volume: Math.floor(Math.random() * 100000000)
-      });
-    }
-    
-    return data;
-  };
-
-  const handleSectorChange = (sectorCode: string) => {
-    setSelectedSector(sectorCode);
   };
 
   const selectedSectorInfo = sectors.find(s => s.code === selectedSector);
@@ -139,25 +142,33 @@ export default function SectorKLineChart({ height = '600px', theme = 'light' }: 
       title={
         <Space>
           <span>板块K线图</span>
-          <Select
+          <AutoComplete
             value={selectedSector}
-            onChange={handleSectorChange}
-            style={{ width: 200 }}
-            placeholder="选择板块"
-            loading={loading}
-          >
-            {sectors.map(sector => (
-              <Option key={sector.code} value={sector.code}>
-                {sector.name}
-              </Option>
-            ))}
-          </Select>
+            onChange={setSelectedSector}
+            options={autoCompleteOptions}
+            placeholder="搜索板块（支持代码或名称）"
+            style={{ width: 400 }}
+            filterOption={(inputValue, option) => {
+              const sector = sectors.find(s => s.code === option?.value);
+              if (!sector) return false;
+              return (
+                sector.name.toLowerCase().includes(inputValue.toLowerCase()) ||
+                sector.code.toLowerCase().includes(inputValue.toLowerCase())
+              );
+            }}
+            notFoundContent="未找到匹配的板块"
+            disabled={loadingSectors}
+            prefix={<SearchOutlined />}
+          />
         </Space>
       }
       extra={
         selectedSectorInfo && (
           <Space direction="vertical" size="small">
-            <span style={{ color: '#999', fontSize: 12 }}>{selectedSectorInfo.description}</span>
+            <Tag color={selectedSectorInfo.type === 'industry' ? 'blue' : 'purple'}>
+              {selectedSectorInfo.type === 'industry' ? '行业板块' : '概念板块'}
+            </Tag>
+            <span style={{ color: '#999', fontSize: 12 }}>{selectedSectorInfo.market} - {selectedSectorInfo.description}</span>
           </Space>
         )
       }

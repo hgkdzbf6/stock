@@ -4,6 +4,8 @@ import api from './api';
 export interface Sector {
   code: string;
   name: string;
+  type: string;
+  market: string;
   description?: string;
 }
 
@@ -33,6 +35,21 @@ export const sectorService = {
       params: { page, page_size: pageSize },
     });
     return response.data;
+  },
+
+  /** 获取板块K线数据 */
+  async getKlineData(params: {
+    code: string;
+    freq?: string;
+    start_date: string;
+    end_date: string;
+  }) {
+    const { code, freq = 'daily', start_date, end_date } = params;
+    const response = await api.get<any>(`/sector/${code}/kline`, {
+      params: { freq, start_date, end_date },
+      timeout: 60000, // 60秒超时
+    });
+    return response;
   },
 };
 

@@ -136,8 +136,10 @@ class MarketService:
             # 转换为列表格式
             kline_data = []
             for timestamp, row in df.iterrows():
+                # 提取日期部分（去除时间）
+                date_str = str(timestamp).split(' ')[0] if ' ' in str(timestamp) else str(timestamp).split('T')[0]
                 kline_data.append({
-                    'timestamp': timestamp.isoformat(),
+                    'date': date_str,  # 前端期望的是 date 字段
                     'open': float(row['open']),
                     'high': float(row['high']),
                     'low': float(row['low']),

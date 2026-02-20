@@ -10,6 +10,7 @@ from api.trading import router as trading_router
 from api.data_download import router as data_download_router
 from api.stock_code import router as stock_code_router
 from api.sector import router as sector_router
+from api.backtest_reports import router as backtest_reports_router
 
 # 创建主路由器
 api_router = APIRouter()
@@ -25,5 +26,6 @@ api_router.include_router(trading_router, tags=["trading"])
 api_router.include_router(data_download_router, prefix="/data", tags=["data-download"])
 api_router.include_router(stock_code_router, tags=["stock-code"])
 api_router.include_router(sector_router, tags=["sector"])
+api_router.include_router(backtest_reports_router, prefix="/backtest-reports", tags=["backtest-reports"])
 
 __all__ = ['api_router']

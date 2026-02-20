@@ -34,6 +34,7 @@ export interface EquityPoint {
   high?: number;                 // 最高价
   low?: number;                  // 最低价
   close?: number;                // 收盘价
+  volume?: number;               // 成交量
 }
 
 export interface BacktestResult {

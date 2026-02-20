@@ -67,7 +67,11 @@ class BacktestEngine:
             if df is None or len(df) == 0:
                 raise Exception("无法获取历史数据")
             
-            logger.info(f"获取到 {len(df)} 条历史数据")
+            # 检查是否有volume数据
+            has_volume = 'volume' in df.columns and df['volume'].notna().any()
+            logger.info(f"获取到 {len(df)} 条历史数据，包含volume: {has_volume}")
+            if not has_volume:
+                logger.warning("⚠️ 数据源未返回成交量数据，请检查数据源配置")
             
             # 2. 计算技术指标和信号
             df = self._calculate_indicators(df, strategy_params)
@@ -234,8 +238,8 @@ class BacktestEngine:
         self.portfolio = pd.DataFrame(index=df.index)
         self.portfolio['cash'] = self.initial_capital
         
-        # 保留OHLC数据用于展示
-        for col in ['open', 'high', 'low', 'close']:
+        # 保留OHLCV数据用于展示
+        for col in ['open', 'high', 'low', 'close', 'volume']:
             if col in df.columns:
                 self.portfolio[col] = df[col]
                 
@@ -423,15 +427,21 @@ class BacktestEngine:
                 'drawdown': float(row['drawdown_pct'])
             }
             
-            # 如果原始数据中有OHLC，也包含进去用于前端K线图展示
+            # 如果原始数据中有OHLCV，也包含进去用于前端K线图展示
             if 'open' in row:
                 point['open'] = float(row['open'])
                 point['high'] = float(row['high'])
                 point['low'] = float(row['low'])
                 point['close'] = float(row['close'])
+                # 添加成交量数据
+                if 'volume' in row:
+                    point['volume'] = int(row['volume'])
             elif 'close' in row:
                 # 兜底逻辑：如果只有close，则OHLC都设为close
                 point['open'] = point['high'] = point['low'] = point['close'] = float(row['close'])
+                # 如果有volume数据
+                if 'volume' in row:
+                    point['volume'] = int(row['volume'])
                 
             equity_curve.append(point)
         
