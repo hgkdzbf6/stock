@@ -67,3 +67,4 @@ pyvenv.cfg
 *.csv
 *.png
 
+*.pid
