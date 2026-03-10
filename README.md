@@ -29,6 +29,7 @@ stock/
 
 ### 开发报告
 - [项目状态总结](docs/reports/PROJECT_STATUS_SUMMARY.md) - 整体项目进度
+- [开发进度报告（2026-03-07）](docs/reports/DEVELOPMENT_PROGRESS_2026-03-07.md) - 最新开发状态与下一步计划
 - [数据源优化](docs/reports/DATA_SOURCE_OPTIMIZATION.md) - 数据源优化方案
 - [缓存实现](docs/reports/CACHE_IMPLEMENTATION.md) - 缓存系统实现
 - [数据下载设计](docs/reports/DATA_DOWNLOAD_DESIGN.md) - 数据下载服务设计
@@ -130,36 +131,28 @@ docker-compose down
 
 ## 当前开发进度
 
-### Phase 1: Web基础平台 + 实时行情 ✅
-- [x] 后端基础架构
-- [x] 前端基础架构
-- [x] 股票列表API
-- [x] 行情数据API
-- [x] 策略管理API
-- [x] 基础UI页面
-- [ ] K线图组件
-- [ ] 技术指标图表
-- [ ] WebSocket实时推送
+### 总体状态（2026-03-07）
+- 项目已完成平台化重构：`backend/` + `frontend/` + `docs/` + `legacy/`
+- 已进入“功能收口 + 稳定性提升”阶段（可开发、可联调、部分功能可运行）
+- 详细进度见：[开发进度报告（2026-03-07）](docs/reports/DEVELOPMENT_PROGRESS_2026-03-07.md)
 
-### Phase 2: AI智能咨询系统 (待实施)
-- [ ] GLM 4.7 API集成
-- [ ] 提示词模板
-- [ ] AI聊天界面
-- [ ] 智能分析功能
+### 已完成
+- [x] 后端主服务架构（FastAPI 生命周期、路由聚合、日志、健康检查）
+- [x] 前端主路由与受保护页面框架（登录/注册/仪表盘/策略/交易/新闻/情绪）
+- [x] 多业务 API 路由接入（stocks/market/auth/strategies/ai/trading/news/sentiment 等）
+- [x] 数据库模型与基础持久化框架（含 SQLite 开发可运行路径）
+- [x] 文档体系（guides + reports）
 
-### Phase 3: 策略优化与管理 (待实施)
-- [ ] 策略参数配置
-- [ ] 网格搜索优化
-- [ ] 遗传算法优化
-- [ ] 贝叶斯优化
-- [ ] 回测引擎
+### 进行中
+- [~] 认证模块去 mock（已完成注册/登录/资料更新/改密的数据库读写，仍有头像上传与 token 黑名单待补）
+- [~] 策略模块收口（部分接口仍有 TODO/临时返回）
+- [~] 交易与优化模块收口（存在占位逻辑，需补全数据库与流程）
 
-### Phase 4: 实盘交易系统 (待实施)
-- [ ] 券商API对接
-- [ ] 订单管理系统
-- [ ] 持仓管理
-- [ ] 风险控制
-- [ ] 监控告警
+### 待完成（高优先级）
+- [ ] 完成策略 CRUD 与参数优化链路的真实落库
+- [ ] 完成交易核心闭环（下单/查询/状态流转/风控最小集）
+- [ ] 用真实行情推送替换 WebSocket mock
+- [ ] 补齐关键回归测试（认证、策略、回测、交易、新闻）
 
 ## 开发规范
 

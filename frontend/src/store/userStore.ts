@@ -1,7 +1,7 @@
 /** 用户状态管理 */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User } from '@types/api';
+import type { User } from '@/types/api';
 import { authService } from '@services/auth';
 
 interface UserState {
@@ -25,7 +25,7 @@ export const useUserStore = create<UserState>()(
         try {
           const response = await authService.login(username, password);
           set({
-            user: response.data.user,
+            user: response.user,
             isAuthenticated: true,
             isLoading: false,
           });
@@ -55,7 +55,7 @@ export const useUserStore = create<UserState>()(
         try {
           const response = await authService.getCurrentUser();
           set({
-            user: response.data,
+            user: response,
             isAuthenticated: true,
             isLoading: false,
           });

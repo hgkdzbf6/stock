@@ -1,6 +1,6 @@
 /** 策略服务 */
 import apiClient from './api';
-import type { Strategy, BacktestRequest, PaginatedResponse } from '@types/api';
+import type { Strategy, BacktestRequest } from '@/types/api';
 
 export const strategyService = {
   /** 获取策略列表 */
@@ -47,11 +47,18 @@ export const strategyService = {
   },
 
   /** 参数优化 */
-  async optimizeStrategy(id: number, params: {
-    method: string;
+  async optimizeStrategy(id: number, data: {
     stock_code: string;
-    param_ranges?: Record<string, any>;
-  }) {
-    return apiClient.post(`/strategies/${id}/optimize`, null, { params });
+    start_date: string;
+    end_date: string;
+    frequency?: string;
+    strategy_type?: string;
+    param_ranges: Record<string, any>;
+    objective?: string;
+    maximize?: boolean;
+  }, method: string = 'grid_search') {
+    return apiClient.post(`/strategies/${id}/optimize`, data, {
+      params: { method }
+    });
   },
 };

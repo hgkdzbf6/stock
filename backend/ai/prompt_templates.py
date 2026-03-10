@@ -382,3 +382,216 @@ class PromptTemplates:
         if len(data) > limit:
             lines.append(f"... 还有 {len(data) - limit} 条数据")
         return "\n".join(lines)
+    
+    # ==================== 舆情分析 ====================
+    
+    SENTIMENT_ANALYSIS = """
+你是一个专业的舆情分析师。请分析以下新闻对股票走势的影响：
+
+## 股票基本信息
+股票代码: {stock_code}
+股票名称: {stock_name}
+板块名称: {sector_name}
+
+## 新闻数据
+{news_data}
+
+请提供以下分析：
+
+1. **整体舆情评分**（-100到+100，负数表示负面，正数表示正面）
+2. **主要正面因素**
+3. **主要负面因素**
+4. **影响时间预估**（短期/中期/长期）
+5. **置信度**（0到1）
+6. **投资建议**
+
+请以JSON格式返回：
+```json
+{{
+  "overall_sentiment": 整体舆情分数（-100到+100）,
+  "positive_factors": [
+    "正面因素1",
+    "正面因素2"
+  ],
+  "negative_factors": [
+    "负面因素1",
+    "负面因素2"
+  ],
+  "impact_duration": "影响时间（short_term/medium_term/long_term）",
+  "impact_hours": 影响持续时间（小时）,
+  "confidence": 置信度（0到1）,
+  "investment_advice": "投资建议",
+  "news_analysis": [
+    {{
+      "news_id": "新闻ID",
+      "title": "新闻标题",
+      "sentiment_score": 该新闻的分数（-100到+100）,
+      "reason": "评分理由"
+    }}
+  ]
+}}
+```
+"""
+    
+    SINGLE_NEWS_ANALYSIS = """
+你是一个专业的舆情分析师。请分析以下单条新闻对股票的影响：
+
+## 股票基本信息
+股票代码: {stock_code}
+股票名称: {stock_name}
+
+## 新闻信息
+标题: {title}
+内容: {content}
+发布时间: {publish_time}
+来源: {source}
+
+请提供以下分析：
+
+1. **舆情评分**（-100到+100，负数表示负面，正数表示正面）
+2. **影响等级**（low/medium/high）
+3. **影响时间预估**（小时）
+4. **评分理由**
+5. **置信度**（0到1）
+
+请以JSON格式返回：
+```json
+{{
+  "news_id": "新闻ID",
+  "title": "新闻标题",
+  "sentiment_score": 舆情分数（-100到+100）,
+  "impact_level": "影响等级（low/medium/high）",
+  "impact_hours": 影响时间（小时）,
+  "reason": "评分理由",
+  "confidence": 置信度（0到1）
+}}
+```
+"""
+    
+    SENTIMENT_BACKTEST = """
+你是一个专业的量化分析师。请根据舆情历史和价格数据，回测舆情对股价的影响：
+
+## 股票基本信息
+股票代码: {stock_code}
+股票名称: {stock_name}
+
+## 回测期间
+开始日期: {start_date}
+结束日期: {end_date}
+
+## 舆情历史
+{sentiment_history}
+
+## 价格数据
+{price_data}
+
+请提供以下回测分析：
+
+1. **相关性分析**（舆情分数与股价变化的相关性）
+2. **预测准确率**（舆情预测股价走势的准确率）
+3. **影响时效性**（舆情对价格的影响持续多久）
+4. **关键发现**
+5. **投资建议**
+
+请以JSON格式返回：
+```json
+{{
+  "correlation": 相关系数（-1到1）,
+  "accuracy": 预测准确率（0到1）,
+  "impact_duration_hours": 平均影响时间（小时）,
+  "key_findings": [
+    "关键发现1",
+    "关键发现2"
+  ],
+  "investment_advice": "投资建议",
+  "data_points": 分析的数据点数量,
+  "positive_cases": 正面舆情案例数,
+  "negative_cases": 负面舆情案例数
+}}
+```
+"""
+    
+    @classmethod
+    def format_sentiment_analysis(
+        cls,
+        news_data: List[Dict[str, Any]],
+        stock_code: str,
+        stock_name: str,
+        sector_name: Optional[str] = None
+    ) -> str:
+        """格式化舆情分析提示词"""
+        news_list = []
+        for i, news in enumerate(news_data):
+            news_list.append(f"""
+{i+1}. 标题: {news.get('title', 'N/A')}
+   来源: {news.get('source', 'N/A')}
+   时间: {news.get('publish_time', 'N/A')}
+   内容: {news.get('content', 'N/A')[:200]}...
+""")
+        
+        news_str = "\n".join(news_list) if news_list else "无新闻数据"
+        
+        return cls.SENTIMENT_ANALYSIS.format(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            sector_name=sector_name or "未指定",
+            news_data=news_str
+        )
+    
+    @classmethod
+    def format_single_news_analysis(
+        cls,
+        news_item: Dict[str, Any],
+        stock_code: str,
+        stock_name: str
+    ) -> str:
+        """格式化单条新闻分析提示词"""
+        return cls.SINGLE_NEWS_ANALYSIS.format(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            news_id=news_item.get("id", ""),
+            title=news_item.get("title", "N/A"),
+            content=news_item.get("content", "N/A"),
+            publish_time=news_item.get("publish_time", "N/A"),
+            source=news_item.get("source", "N/A")
+        )
+    
+    @classmethod
+    def format_sentiment_backtest(
+        cls,
+        stock_code: str,
+        stock_name: str,
+        sentiment_history: List[Dict[str, Any]],
+        price_data: List[Dict[str, Any]],
+        start_date: str,
+        end_date: str
+    ) -> str:
+        """格式化舆情回测提示词"""
+        # 格式化舆情历史
+        sentiment_lines = []
+        for item in sentiment_history[:20]:  # 限制显示数量
+            sentiment_lines.append(f"""
+时间: {item.get('date', 'N/A')}
+舆情分数: {item.get('sentiment_score', 'N/A')}
+影响时间: {item.get('impact_hours', 'N/A')}小时
+""")
+        sentiment_str = "\n".join(sentiment_lines) if sentiment_lines else "无数据"
+        
+        # 格式化价格数据
+        price_lines = []
+        for item in price_data[:20]:  # 限制显示数量
+            price_lines.append(f"""
+时间: {item.get('date', 'N/A')}
+收盘价: {item.get('close', 'N/A')}
+涨跌幅: {item.get('change_pct', 'N/A')}%
+""")
+        price_str = "\n".join(price_lines) if price_lines else "无数据"
+        
+        return cls.SENTIMENT_BACKTEST.format(
+            stock_code=stock_code,
+            stock_name=stock_name,
+            start_date=start_date,
+            end_date=end_date,
+            sentiment_history=sentiment_str,
+            price_data=price_str
+        )

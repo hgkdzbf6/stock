@@ -78,25 +78,68 @@ async def connect_broker() -> bool:
 
 
 @router.post("/connect")
-async def connect_trading(current_user: User = Depends(get_current_user)):
-    """连接交易系统"""
-    success = await connect_broker()
+async def connect_trading(
+    broker_id: str,
+    account: str,
+    password: str,
+    trading_server: str,
+    trading_port: int,
+    quote_server: str,
+    quote_port: int,
+    current_user: User = Depends(get_current_user),
+):
+    """连接交易系统
     
-    if success:
-        # 同步账户和持仓
-        await _account_manager.sync_account()
-        await _position_manager.sync_positions()
-        
-        return {
-            "code": 200,
-            "message": "连接成功",
-            "data": {"connected": True}
-        }
-    else:
+    Args:
+        broker_id: 券商ID
+        account: 交易账号
+        password: 交易密码
+        trading_server: 交易服务器地址
+        trading_port: 交易服务器端口
+        quote_server: 行情服务器地址
+        quote_port: 行情服务器端口
+    """
+    global _order_manager, _position_manager, _account_manager, _risk_controller
+    
+    # 创建券商配置
+    broker_config = {
+        "broker_id": broker_id,
+        "account": account,
+        "password": password,
+        "trading_server": trading_server,
+        "trading_port": trading_port,
+        "quote_server": quote_server,
+        "quote_port": quote_port,
+    }
+    
+    # 创建券商接口（使用XTP作为示例）
+    broker = XTPBroker(broker_config)
+    
+    # 创建管理器
+    _order_manager = OrderManager(broker)
+    _position_manager = PositionManager(broker)
+    _account_manager = AccountManager(broker)
+    _risk_controller = RiskController({})
+    
+    # 连接券商
+    try:
+        await broker.connect()
+        await broker.login(account, password)
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="连接交易系统失败"
+            detail=f"连接交易系统失败: {str(e)}"
         )
+    
+    # 同步账户和持仓
+    await _account_manager.sync_account()
+    await _position_manager.sync_positions()
+    
+    return {
+        "code": 200,
+        "message": "连接成功",
+        "data": {"connected": True}
+    }
 
 
 @router.post("/orders")

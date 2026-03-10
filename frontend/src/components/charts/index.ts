@@ -1,2 +1,2 @@
-export { default as KLineChart } from './KLineChart';
+export { default as KLineChart } from './EnhancedKLineChart';
 export { default as BacktestCharts } from './BacktestCharts';

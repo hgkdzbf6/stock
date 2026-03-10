@@ -28,6 +28,9 @@ scipy>=1.11.0
 pyarrow>=14.0.0  # Parquet文件格式支持
 # TA-Lib-binary>=0.4.26  # 暂时移除，Python 3.13兼容性问题
 
+# RSS/新闻
+feedparser>=6.0.10
+
 # 数据源
 akshare>=1.12.0
 tushare>=1.2.90

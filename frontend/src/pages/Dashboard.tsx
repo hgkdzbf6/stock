@@ -25,12 +25,24 @@ const Dashboard = () => {
     const fetchStocks = async () => {
       try {
         setLoading(true);
-        const response = await stockService.getStockList({ page: 1, page_size: 10 });
+        const response = await stockService.getStockList({ page: 1, page_size: 10 }) as any;
         
-        if (response.code === 200 && response.data) {
-          // 转换数据格式
-          const stockList = response.data.items || [];
-          setStocks(stockList);
+        if (response && response.items) {
+          // 转换数据格式并去重
+          const stockList = response.items || [];
+          
+          // 根据代码去重，保留第一次出现的
+          const uniqueStocks = stockList.filter((stock: Stock, index: number, self: Stock[]) => 
+            index === self.findIndex((s) => s.code === stock.code)
+          );
+          
+          // 添加唯一索引作为备用key
+          const stocksWithIndex = uniqueStocks.map((stock: Stock, index: number) => ({
+            ...stock,
+            _uniqueKey: `${stock.code}_${index}`
+          }));
+          
+          setStocks(stocksWithIndex);
         }
       } catch (error) {
         console.error('获取股票列表失败:', error);
@@ -147,7 +159,7 @@ const Dashboard = () => {
             columns={columns}
             pagination={false}
             size="middle"
-            rowKey="code"
+            rowKey="_uniqueKey"
           />
         </Spin>
       </Card>

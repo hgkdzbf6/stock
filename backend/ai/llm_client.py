@@ -218,5 +218,9 @@ def get_llm_client() -> LLMClient:
     """
     global _llm_client
     if _llm_client is None:
-        _llm_client = LLMClient()
+        from core.config import settings
+        _llm_client = LLMClient(
+            api_key=settings.GLM_API_KEY,
+            api_base=settings.GLM_API_BASE
+        )
     return _llm_client

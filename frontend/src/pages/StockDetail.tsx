@@ -49,6 +49,8 @@ const StockDetail = () => {
   }, [code]);
 
   const loadStockInfo = async () => {
+    if (!code) return;
+
     try {
       setLoading(true);
       setStockInfoError(null);

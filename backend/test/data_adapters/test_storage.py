@@ -5,9 +5,10 @@ import duckdb
 from datetime import datetime
 from pathlib import Path
 import sys
+import os
 
 # 添加项目根目录到路径
-sys.path.append('..')
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from services.duckdb_storage_service import DuckDBStorageService
 
@@ -309,6 +310,70 @@ class TestDuckDBStorageService(unittest.TestCase):
         
         self.assertIsNotNone(loaded_data)
         self.assertEqual(len(loaded_data), 2)
+
+    def test_incremental_save_no_duplicate(self):
+        """测试增量保存不会产生重复数据"""
+        data_a = pd.DataFrame({
+            'date': pd.date_range('2025-01-01', periods=3, freq='D'),
+            'open': [10.0, 11.0, 12.0],
+            'high': [11.0, 12.0, 13.0],
+            'low': [9.0, 10.0, 11.0],
+            'close': [10.5, 11.5, 12.5],
+            'volume': [100, 110, 120],
+            'amount': [1000, 1100, 1200],
+        })
+        data_b = pd.DataFrame({
+            'date': pd.date_range('2025-01-03', periods=3, freq='D'),
+            'open': [12.0, 13.0, 14.0],
+            'high': [13.0, 14.0, 15.0],
+            'low': [11.0, 12.0, 13.0],
+            'close': [12.8, 13.8, 14.8],  # 2025-01-03 将被更新
+            'volume': [121, 130, 140],
+            'amount': [1210, 1300, 1400],
+        })
+
+        self.storage.save_kline_data(data_a, '600519.SH', 'daily')
+        self.storage.save_kline_data(data_b, '600519.SH', 'daily')
+
+        loaded = self.storage.load_kline_data(
+            '600519.SH',
+            datetime(2025, 1, 1),
+            datetime(2025, 1, 5),
+            'daily',
+        )
+
+        self.assertIsNotNone(loaded)
+        self.assertEqual(len(loaded), 5)
+        self.assertAlmostEqual(float(loaded.loc['2025-01-03']['close']), 12.8)
+
+    def test_aggregate_30min_to_daily(self):
+        """测试30分钟线聚合日线"""
+        timestamps = pd.to_datetime([
+            '2025-01-01 09:30:00', '2025-01-01 10:00:00', '2025-01-01 10:30:00',
+            '2025-01-02 09:30:00', '2025-01-02 10:00:00',
+        ])
+        data = pd.DataFrame({
+            'date': timestamps,
+            'open': [10.0, 10.2, 10.3, 11.0, 11.2],
+            'high': [10.5, 10.6, 10.7, 11.5, 11.6],
+            'low': [9.9, 10.1, 10.2, 10.8, 11.0],
+            'close': [10.2, 10.3, 10.4, 11.2, 11.4],
+            'volume': [100, 120, 140, 150, 160],
+            'amount': [1000, 1200, 1400, 1500, 1600],
+        })
+
+        self.storage.save_kline_data(data, '000001.SZ', '30min')
+        daily = self.storage.aggregate_30min_to_daily(
+            '000001.SZ',
+            datetime(2025, 1, 1),
+            datetime(2025, 1, 2),
+        )
+
+        self.assertIsNotNone(daily)
+        self.assertEqual(len(daily), 2)
+        self.assertAlmostEqual(float(daily.iloc[0]['open']), 10.0)
+        self.assertAlmostEqual(float(daily.iloc[0]['close']), 10.4)
+        self.assertEqual(int(daily.iloc[0]['volume']), 360)
 
 
 if __name__ == '__main__':

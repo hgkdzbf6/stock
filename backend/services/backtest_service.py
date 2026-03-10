@@ -136,6 +136,16 @@ class BacktestEngine:
             df = self._calculate_boll_signals(df, params)
         elif strategy_type == 'MACD':
             df = self._calculate_macd_signals(df, params)
+        elif strategy_type == 'TURTLE':
+            df = self._calculate_turtle_signals(df, params)
+        elif strategy_type == 'KDJ':
+            df = self._calculate_kdj_signals(df, params)
+        elif strategy_type == 'ATR':
+            df = self._calculate_atr_signals(df, params)
+        elif strategy_type == 'DUAL_THRUST':
+            df = self._calculate_dual_thrust_signals(df, params)
+        elif strategy_type == 'HANS123':
+            df = self._calculate_hans123_signals(df, params)
         else:
             # 默认使用双均线策略
             df = self._calculate_ma_signals(df, params)
@@ -225,6 +235,135 @@ class BacktestEngine:
         df['signal'] = 0
         df.loc[df['MACD_hist'] > 0, 'signal'] = 1  # MACD柱状图大于0买入
         df.loc[df['MACD_hist'] < 0, 'signal'] = -1  # MACD柱状图小于0卖出
+        
+        # 消除连续信号
+        df['signal'] = df['signal'].diff()
+        df['signal'] = df['signal'].fillna(0)
+        
+        return df
+    
+    def _calculate_turtle_signals(self, df: pd.DataFrame, params: Dict) -> pd.DataFrame:
+        """计算海龟交易策略信号（唐奇安通道突破）"""
+        period = params.get('period', 20)  # 突破周期
+        
+        # 计算唐奇安通道
+        df['turtle_high'] = df['high'].rolling(window=period).max()
+        df['turtle_low'] = df['low'].rolling(window=period).min()
+        
+        # 生成信号
+        df['signal'] = 0
+        df.loc[df['close'] > df['turtle_high'].shift(1), 'signal'] = 1  # 突破上轨买入
+        df.loc[df['close'] < df['turtle_low'].shift(1), 'signal'] = -1  # 跌破下轨卖出
+        
+        # 消除连续信号
+        df['signal'] = df['signal'].diff()
+        df['signal'] = df['signal'].fillna(0)
+        
+        return df
+    
+    def _calculate_kdj_signals(self, df: pd.DataFrame, params: Dict) -> pd.DataFrame:
+        """计算KDJ策略信号"""
+        fastk_period = params.get('fastk_period', 9)
+        slowk_period = params.get('slowk_period', 3)
+        slowd_period = params.get('slowd_period', 3)
+        kdj_buy = params.get('kdj_buy', 20)
+        kdj_sell = params.get('kdj_sell', 80)
+        
+        # 计算KDJ指标
+        low_min = df['low'].rolling(window=fastk_period).min()
+        high_max = df['high'].rolling(window=fastk_period).max()
+        
+        # RSV (Raw Stochastic Value)
+        rsv = (df['close'] - low_min) / (high_max - low_min + 1e-6) * 100
+        
+        # 计算K、D、J线
+        df['K'] = rsv.ewm(com=slowk_period-1, adjust=False).mean()
+        df['D'] = df['K'].ewm(com=slowd_period-1, adjust=False).mean()
+        df['J'] = 3 * df['K'] - 2 * df['D']
+        
+        # 生成信号
+        df['signal'] = 0
+        df.loc[(df['K'] < kdj_buy) | (df['D'] < kdj_buy), 'signal'] = 1  # 超卖买入
+        df.loc[(df['K'] > kdj_sell) | (df['D'] > kdj_sell), 'signal'] = -1  # 超买卖出
+        
+        # 消除连续信号
+        df['signal'] = df['signal'].diff()
+        df['signal'] = df['signal'].fillna(0)
+        
+        return df
+    
+    def _calculate_atr_signals(self, df: pd.DataFrame, params: Dict) -> pd.DataFrame:
+        """计算ATR策略信号"""
+        atr_period = params.get('atr_period', 14)
+        atr_multiplier = params.get('atr_multiplier', 2.0)
+        
+        # 计算真实波幅（TR）
+        high_low = df['high'] - df['low']
+        high_close = np.abs(df['high'] - df['close'].shift())
+        low_close = np.abs(df['low'] - df['close'].shift())
+        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        
+        # 计算ATR
+        df['ATR'] = tr.rolling(window=atr_period).mean()
+        
+        # 计算通道
+        df['ATR_upper'] = df['close'] + atr_multiplier * df['ATR']
+        df['ATR_lower'] = df['close'] - atr_multiplier * df['ATR']
+        
+        # 生成信号
+        df['signal'] = 0
+        df.loc[df['close'] > df['ATR_upper'].shift(1), 'signal'] = 1  # 突破上轨买入
+        df.loc[df['close'] < df['ATR_lower'].shift(1), 'signal'] = -1  # 跌破下轨卖出
+        
+        # 消除连续信号
+        df['signal'] = df['signal'].diff()
+        df['signal'] = df['signal'].fillna(0)
+        
+        return df
+    
+    def _calculate_dual_thrust_signals(self, df: pd.DataFrame, params: Dict) -> pd.DataFrame:
+        """计算Dual-Thrust策略信号"""
+        n_days = params.get('n_days', 5)
+        k1 = params.get('k1', 0.7)
+        k2 = params.get('k2', 0.7)
+        
+        # 计算前N日的高低范围
+        high_range = df['high'].rolling(window=n_days).max()
+        low_range = df['low'].rolling(window=n_days).min()
+        
+        # 计算突破区间
+        df['dual_upper'] = df['open'] + k1 * (high_range - low_range)
+        df['dual_lower'] = df['open'] - k2 * (high_range - low_range)
+        
+        # 生成信号
+        df['signal'] = 0
+        df.loc[df['close'] > df['dual_upper'].shift(1), 'signal'] = 1  # 突破上轨买入
+        df.loc[df['close'] < df['dual_lower'].shift(1), 'signal'] = -1  # 跌破下轨卖出
+        
+        # 消除连续信号
+        df['signal'] = df['signal'].diff()
+        df['signal'] = df['signal'].fillna(0)
+        
+        return df
+    
+    def _calculate_hans123_signals(self, df: pd.DataFrame, params: Dict) -> pd.DataFrame:
+        """计算Hans123策略信号"""
+        morning_bars = params.get('morning_bars', 6)  # 早盘K线数量（6根=30分钟）
+        breakout_percent = params.get('breakout_percent', 0.1)  # 突破百分比
+        
+        # 计算早盘区间
+        df['morning_high'] = df['high'].rolling(window=morning_bars).max()
+        df['morning_low'] = df['low'].rolling(window=morning_bars).min()
+        
+        # 计算突破区间
+        breakout_range = df['morning_high'] - df['morning_low']
+        df['hans_upper'] = df['morning_high'] + breakout_percent * breakout_range
+        df['hans_lower'] = df['morning_low'] - breakout_percent * breakout_range
+        
+        # 生成信号
+        df['signal'] = 0
+        df.loc[df['close'] > df['hans_upper'].shift(1), 'signal'] = 1  # 突破上轨买入
+        df.loc[df['close'] < df['hans_lower'].shift(1), 'signal'] = -1  # 跌破下轨卖出
         
         # 消除连续信号
         df['signal'] = df['signal'].diff()

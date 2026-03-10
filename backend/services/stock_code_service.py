@@ -250,7 +250,7 @@ class StockCodeService:
         获取股票详细信息
         
         Args:
-            code: 股票代码
+            code: 股票代码（支持带或不带后缀，如 600771 或 600771.SH）
             
         Returns:
             股票信息字典
@@ -260,9 +260,19 @@ class StockCodeService:
                 logger.warning("股票列表为空")
                 return None
             
-            # 精确匹配
-            mask = self.stock_list_df['代码'] == code
-            results = self.stock_list_df[mask]
+            # 确保代码列是字符串类型
+            df = self.stock_list_df.copy()
+            df['代码'] = df['代码'].astype(str)
+            
+            # 先尝试精确匹配
+            mask = df['代码'] == code
+            results = df[mask]
+            
+            # 如果没找到，尝试不带后缀的匹配
+            if len(results) == 0 and '.' not in code:
+                # 尝试匹配代码的前缀部分
+                mask = df['代码'].str.startswith(code + '.')
+                results = df[mask]
             
             if len(results) == 0:
                 logger.warning(f"未找到股票: {code}")

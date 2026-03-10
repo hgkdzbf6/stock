@@ -8,6 +8,8 @@ import {
   BarChartOutlined,
   FileTextOutlined,
   RobotOutlined,
+  ThunderboltOutlined,
+  ReadOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -42,6 +44,16 @@ const Sidebar = () => {
       key: '/ai-agent',
       icon: <RobotOutlined />,
       label: 'AI Agent',
+    },
+    {
+      key: '/sentiment',
+      icon: <ThunderboltOutlined />,
+      label: '舆情分析',
+    },
+    {
+      key: '/news',
+      icon: <ReadOutlined />,
+      label: '新闻获取',
     },
     {
       key: '/backtest-report',

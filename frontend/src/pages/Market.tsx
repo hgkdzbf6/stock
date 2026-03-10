@@ -50,11 +50,11 @@ const Market = () => {
         data_source: dataSource,
       });
 
-      if (response.code === 200 && response.data) {
-        setStocks(response.data.items || []);
+      if (response) {
+        setStocks(response.items || []);
         setPagination({
           ...pagination,
-          total: response.data.total || 0,
+          total: response.total || 0,
         });
       }
     } catch (error) {

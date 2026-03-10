@@ -1,6 +1,6 @@
 /** 市场行情状态管理 */
 import { create } from 'zustand';
-import type { Quote } from '@types/api';
+import type { Quote } from '@/types/api';
 import { marketService } from '@services/market';
 
 interface MarketState {
@@ -23,7 +23,7 @@ export const useMarketStore = create<MarketState>((set) => ({
     try {
       const response = await marketService.getQuote(code);
       set((state) => ({
-        quotes: { ...state.quotes, [code]: response.data },
+        quotes: { ...state.quotes, [code]: response },
         isLoading: false,
       }));
     } catch (error: any) {
@@ -39,7 +39,12 @@ export const useMarketStore = create<MarketState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await marketService.getBatchQuotes(codes);
-      const quotesMap = response.data.reduce(
+      const quotes = Array.isArray(response)
+        ? response
+        : Array.isArray((response as any)?.items)
+          ? (response as any).items
+          : [];
+      const quotesMap = quotes.reduce(
         (acc: Record<string, Quote>, quote: Quote) => {
           acc[quote.stock_code] = quote;
           return acc;

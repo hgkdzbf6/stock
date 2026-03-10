@@ -82,6 +82,45 @@ class DuckDBStorageService:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # 创建下载数据包表（按股票集合 + 时间段打包）
+            self.con.execute("""
+                CREATE TABLE IF NOT EXISTS download_packages (
+                    package_id VARCHAR PRIMARY KEY,
+                    package_name VARCHAR(200),
+                    start_date TIMESTAMP NOT NULL,
+                    end_date TIMESTAMP NOT NULL,
+                    base_frequency VARCHAR(10) NOT NULL,
+                    include_daily BOOLEAN DEFAULT FALSE,
+                    source VARCHAR(20),
+                    stock_count INTEGER DEFAULT 0,
+                    metadata JSON,
+                    last_synced_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 创建数据包内股票同步状态表
+            self.con.execute("""
+                CREATE TABLE IF NOT EXISTS package_stock_sync (
+                    package_id VARCHAR NOT NULL,
+                    stock_code VARCHAR(20) NOT NULL,
+                    stock_name VARCHAR(100),
+                    base_frequency VARCHAR(10) NOT NULL,
+                    has_daily BOOLEAN DEFAULT FALSE,
+                    base_data_points INTEGER DEFAULT 0,
+                    daily_data_points INTEGER DEFAULT 0,
+                    range_start TIMESTAMP,
+                    range_end TIMESTAMP,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    message VARCHAR,
+                    last_synced_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(package_id, stock_code)
+                )
+            """)
             
             logger.info("[DuckDB] 表结构初始化完成")
             
@@ -109,6 +148,8 @@ class DuckDBStorageService:
             保存的记录数
         """
         try:
+            frequency = self._normalize_frequency(frequency)
+
             # ✅ 如果提供了股票名称，更新stock_info表
             if stock_name:
                 self._update_stock_info(stock_code, stock_name)
@@ -171,6 +212,10 @@ class DuckDBStorageService:
                 if col not in df_reset.columns:
                     df_reset[col] = default_val
             
+            # 标准化日期并按时间去重（保留最后一条）
+            df_reset['date'] = pd.to_datetime(df_reset['date'])
+            df_reset = df_reset.sort_values('date').drop_duplicates(subset=['date'], keep='last')
+
             # 生成ID
             max_id_result = self.con.execute(
                 "SELECT COALESCE(MAX(id), 0) FROM kline_data"
@@ -189,13 +234,20 @@ class DuckDBStorageService:
             # 选择并排序列
             df_insert = df_reset[table_columns]
             
-            # 删除已存在的数据
-            self.con.execute("""
-                DELETE FROM kline_data 
-                WHERE stock_code = ? AND frequency = ?
-            """, [stock_code, frequency])
-            
-            # 批量插入
+            # 增量写入：仅替换本次写入的时间区间，避免重复下载导致重复数据
+            min_date = df_reset['date'].min()
+            max_date = df_reset['date'].max()
+            self.con.execute(
+                """
+                DELETE FROM kline_data
+                WHERE stock_code = ?
+                  AND frequency = ?
+                  AND date >= ?
+                  AND date <= ?
+                """,
+                [stock_code, frequency, min_date, max_date],
+            )
+
             self.con.execute("INSERT INTO kline_data SELECT * FROM df_insert")
             
             count = len(df_reset)
@@ -205,6 +257,28 @@ class DuckDBStorageService:
         except Exception as e:
             logger.error(f"[DuckDB] 保存K线数据失败: {e}")
             raise
+
+    def _normalize_frequency(self, frequency: str) -> str:
+        """统一频率表示。"""
+        mapping = {
+            '1d': 'daily',
+            'd': 'daily',
+            'day': 'daily',
+            'daily': 'daily',
+            '30m': '30min',
+            '30min': '30min',
+            '60m': '60min',
+            '60min': '60min',
+            '15m': '15min',
+            '15min': '15min',
+            '5m': '5min',
+            '5min': '5min',
+            '1m': '1min',
+            '1min': '1min',
+            '1w': 'weekly',
+            'weekly': 'weekly',
+        }
+        return mapping.get((frequency or '').lower(), frequency)
     
     def _update_stock_info(self, stock_code: str, stock_name: str):
         """
@@ -275,6 +349,13 @@ class DuckDBStorageService:
             K线数据DataFrame
         """
         try:
+            frequency = self._normalize_frequency(frequency)
+
+            query_end = end_date
+            if frequency in {'1min', '5min', '15min', '30min', '60min'}:
+                if isinstance(end_date, datetime) and end_date.time() == datetime.min.time():
+                    query_end = end_date + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+
             # 使用索引查询
             query = """
                 SELECT date, open, high, low, close, volume, amount,
@@ -289,7 +370,7 @@ class DuckDBStorageService:
             
             df = self.con.execute(
                 query, 
-                [stock_code, frequency, start_date, end_date]
+                [stock_code, frequency, start_date, query_end]
             ).df()
             
             if df.empty:
@@ -306,6 +387,174 @@ class DuckDBStorageService:
         except Exception as e:
             logger.error(f"[DuckDB] 加载K线数据失败: {e}")
             return None
+
+    def aggregate_30min_to_daily(
+        self,
+        stock_code: str,
+        start_date: datetime,
+        end_date: datetime
+    ) -> Optional[pd.DataFrame]:
+        """从30分钟线聚合生成日线数据。"""
+        try:
+            intraday = self.load_kline_data(stock_code, start_date, end_date, '30min')
+            if intraday is None or intraday.empty:
+                return None
+
+            df = intraday.copy()
+            df.index = pd.to_datetime(df.index)
+            df = df.sort_index()
+
+            daily = pd.DataFrame({
+                'open': df['open'].resample('1D').first(),
+                'high': df['high'].resample('1D').max(),
+                'low': df['low'].resample('1D').min(),
+                'close': df['close'].resample('1D').last(),
+                'volume': df['volume'].resample('1D').sum(),
+                'amount': df['amount'].resample('1D').sum() if 'amount' in df.columns else 0.0,
+            }).dropna(subset=['open', 'high', 'low', 'close'])
+
+            return daily
+
+        except Exception as e:
+            logger.error(f"[DuckDB] 30分钟聚合日线失败: {e}")
+            return None
+
+    def get_coverage_range(
+        self,
+        stock_code: str,
+        frequency: str = 'daily'
+    ) -> Optional[Dict]:
+        """获取某股票某频率已落库数据覆盖范围。"""
+        try:
+            frequency = self._normalize_frequency(frequency)
+            row = self.con.execute(
+                """
+                SELECT MIN(date) as min_date, MAX(date) as max_date, COUNT(*) as data_count
+                FROM kline_data
+                WHERE stock_code = ? AND frequency = ?
+                """,
+                [stock_code, frequency],
+            ).fetchone()
+
+            if not row or row[0] is None:
+                return None
+
+            return {
+                'stock_code': stock_code,
+                'frequency': frequency,
+                'start_date': row[0],
+                'end_date': row[1],
+                'data_count': int(row[2] or 0),
+            }
+        except Exception as e:
+            logger.error(f"[DuckDB] 获取覆盖范围失败: {e}")
+            return None
+
+    def upsert_download_package(
+        self,
+        package_id: str,
+        package_name: str,
+        start_date: datetime,
+        end_date: datetime,
+        base_frequency: str,
+        include_daily: bool,
+        source: str,
+        stock_count: int,
+        metadata: str = '{}'
+    ) -> None:
+        """创建或更新下载数据包元信息。"""
+        try:
+            base_frequency = self._normalize_frequency(base_frequency)
+            self.con.execute(
+                """
+                INSERT INTO download_packages (
+                    package_id, package_name, start_date, end_date,
+                    base_frequency, include_daily, source, stock_count,
+                    metadata, last_synced_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT(package_id) DO UPDATE SET
+                    package_name = excluded.package_name,
+                    start_date = excluded.start_date,
+                    end_date = excluded.end_date,
+                    base_frequency = excluded.base_frequency,
+                    include_daily = excluded.include_daily,
+                    source = excluded.source,
+                    stock_count = excluded.stock_count,
+                    metadata = excluded.metadata,
+                    last_synced_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                [
+                    package_id,
+                    package_name,
+                    start_date,
+                    end_date,
+                    base_frequency,
+                    include_daily,
+                    source,
+                    stock_count,
+                    metadata,
+                ],
+            )
+        except Exception as e:
+            logger.error(f"[DuckDB] upsert下载包失败: {e}")
+            raise
+
+    def upsert_package_stock_sync(
+        self,
+        package_id: str,
+        stock_code: str,
+        stock_name: Optional[str],
+        base_frequency: str,
+        has_daily: bool,
+        base_data_points: int,
+        daily_data_points: int,
+        range_start: datetime,
+        range_end: datetime,
+        status: str,
+        message: str,
+    ) -> None:
+        """更新下载包内个股同步状态。"""
+        try:
+            base_frequency = self._normalize_frequency(base_frequency)
+            self.con.execute(
+                """
+                INSERT INTO package_stock_sync (
+                    package_id, stock_code, stock_name, base_frequency,
+                    has_daily, base_data_points, daily_data_points,
+                    range_start, range_end, status, message,
+                    last_synced_at, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT(package_id, stock_code) DO UPDATE SET
+                    stock_name = excluded.stock_name,
+                    base_frequency = excluded.base_frequency,
+                    has_daily = excluded.has_daily,
+                    base_data_points = excluded.base_data_points,
+                    daily_data_points = excluded.daily_data_points,
+                    range_start = excluded.range_start,
+                    range_end = excluded.range_end,
+                    status = excluded.status,
+                    message = excluded.message,
+                    last_synced_at = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                [
+                    package_id,
+                    stock_code,
+                    stock_name,
+                    base_frequency,
+                    has_daily,
+                    base_data_points,
+                    daily_data_points,
+                    range_start,
+                    range_end,
+                    status,
+                    message,
+                ],
+            )
+        except Exception as e:
+            logger.error(f"[DuckDB] upsert下载包个股状态失败: {e}")
+            raise
     
     def update_kline_fields(
         self,
@@ -588,6 +837,7 @@ class DuckDBStorageService:
             数据信息
         """
         try:
+            frequency = self._normalize_frequency(frequency)
             query = """
                 SELECT 
                     MIN(date) as start_date,
@@ -632,8 +882,9 @@ class DuckDBStorageService:
     
     def close(self):
         """关闭数据库连接"""
-        if self.con:
-            self.con.close()
+        con = getattr(self, 'con', None)
+        if con is not None:
+            con.close()
             logger.info("[DuckDB] 数据库连接已关闭")
     
     def __del__(self):

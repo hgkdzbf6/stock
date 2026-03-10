@@ -36,6 +36,18 @@ class BatchDownloadRequest(BaseModel):
     source: str = Field("auto", description="数据源")
 
 
+class DownloadPackageRequest(BaseModel):
+    """下载数据包请求（按股票集合+时间段）"""
+    stock_codes: List[str] = Field(..., description="股票代码列表")
+    start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
+    end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
+    base_frequency: str = Field("30min", description="基础频率，建议30min")
+    include_daily: bool = Field(True, description="是否从30分钟线自动聚合日线")
+    source: str = Field("auto", description="数据源")
+    package_name: Optional[str] = Field(None, description="数据包名称")
+    force_download: bool = Field(False, description="是否强制重新下载")
+
+
 class CheckDataRequest(BaseModel):
     """检查数据请求"""
     stock_code: str = Field(..., description="股票代码")
@@ -59,6 +71,19 @@ class DownloadResponse(BaseModel):
 
 class BatchDownloadResponse(BaseModel):
     """批量下载响应"""
+    total: int
+    success: int
+    failed: int
+    results: List[dict]
+
+
+class DownloadPackageResponse(BaseModel):
+    """下载数据包响应"""
+    status: str
+    package_id: str
+    package_name: str
+    base_frequency: str
+    include_daily: bool
     total: int
     success: int
     failed: int
@@ -158,6 +183,38 @@ async def batch_download_stock_data(request: BatchDownloadRequest):
     except Exception as e:
         logger.error(f"批量下载失败: {e}")
         raise HTTPException(status_code=500, detail=f"批量下载失败: {str(e)}")
+
+
+@router.post("/download-package", response_model=DownloadPackageResponse)
+async def download_data_package(request: DownloadPackageRequest):
+    """按股票集合+时间段打包下载数据，并支持30分钟线自动聚合日线。"""
+    try:
+        start_date = datetime.strptime(request.start_date, "%Y-%m-%d")
+        end_date = datetime.strptime(request.end_date, "%Y-%m-%d")
+
+        if start_date > end_date:
+            raise HTTPException(status_code=400, detail="start_date 不能晚于 end_date")
+
+        result = await download_service.download_data_package(
+            stock_codes=request.stock_codes,
+            start_date=start_date,
+            end_date=end_date,
+            base_frequency=request.base_frequency,
+            source=request.source,
+            include_daily=request.include_daily,
+            package_name=request.package_name,
+            force_download=request.force_download,
+        )
+
+        return result
+    except HTTPException:
+        raise
+    except ValueError as e:
+        logger.error(f"日期格式错误: {e}")
+        raise HTTPException(status_code=400, detail=f"日期格式错误: {str(e)}")
+    except Exception as e:
+        logger.error(f"打包下载失败: {e}")
+        raise HTTPException(status_code=500, detail=f"打包下载失败: {str(e)}")
 
 
 @router.get("/check", response_model=CheckDataResponse)
